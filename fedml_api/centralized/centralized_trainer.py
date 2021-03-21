@@ -9,6 +9,7 @@ from torch.nn.parallel import DistributedDataParallel
 class CentralizedTrainer(object):
     r"""
     This class is used to train federated non-IID dataset in a centralized way
+    拿到所有客户端的数据后在云端集中进行参数优化得到模型，之后在这些客户端上进行性能评估
     """
 
     def __init__(self, dataset, model, device, args):
@@ -16,45 +17,56 @@ class CentralizedTrainer(object):
         self.args = args
         [train_data_num, test_data_num, train_data_global, test_data_global,
          train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num] = dataset
-        self.train_global = train_data_global
-        self.test_global = test_data_global
-        self.train_data_num_in_total = train_data_num
+        self.train_global = train_data_global  # 全局的训练数据
+        self.test_global = test_data_global  # 全局的测试数据
+        self.train_data_num_in_total = train_data_num  # 其实可以统一一下名称，表示总的数据数量
         self.test_data_num_in_total = test_data_num
         self.train_data_local_num_dict = train_data_local_num_dict
         self.train_data_local_dict = train_data_local_dict
         self.test_data_local_dict = test_data_local_dict
 
         self.model = model
-        self.model.to(self.device)
-        self.criterion = nn.CrossEntropyLoss()
+        self.model.to(self.device)  # model.to：将模型加载到指定设备上，常见的有cpu和cuda，使用它来进行GPU和CPU的类型转换
+        self.criterion = nn.CrossEntropyLoss()  # 设置标准：进行交叉熵计算
+        # 利用pytorch对参数进行优化，根据客户端优化器参数选择相应的优化器
         if self.args.client_optimizer == "sgd":
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.lr)
-        else:
+        else:  # 默认使用Adam，注意所需的那些参数情况
             self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()),
                                               lr=self.args.lr,
                                               weight_decay=self.args.wd, amsgrad=True)
 
     def train(self):
         for epoch in range(self.args.epochs):
-            if self.args.data_parallel == 1:
-                self.train_global.sampler.set_epoch(epoch)
+            if self.args.data_parallel == 1:  # 判断是否并行，针对单服务器多gpu数据并行，并行只存在于前向传播中
+                self.train_global.sampler.set_epoch(epoch)  # torch的dataloader设置迭代次数
+            # 进行具体的训练
             self.train_impl(epoch)
             self.eval_impl(epoch)
 
     def train_impl(self, epoch_idx):
+        """某一次迭代的具体训练过程，使用批梯度下降"""
         self.model.train()
         for batch_idx, (x, labels) in enumerate(self.train_global):
             # logging.info(images.shape)
+            # 步骤1：准备好进入模型的数据【将他们转化为一致类型】
             x, labels = x.to(self.device), labels.to(self.device)
-            self.optimizer.zero_grad()
+            # 步骤2：回调 *积累* 梯度。 在进入一个实例前,需要将之前的实例梯度置零
+            self.optimizer.zero_grad()  # 将优化的参数梯度设置为0
+            # 步骤3：运行反向传播,得到概率分布
             log_probs = self.model(x)
+            # 步骤4：计算损失函数。( Torch需要将目标单词封装在变量中：loss = loss_function(log_probs, autograd.Variable(
+            #             torch.LongTensor([word_to_ix[target]]))))
+            # 也有使用交叉熵的criterion
             loss = self.criterion(log_probs, labels)
+            # 步骤5：反向传播并更新梯度
             loss.backward()
             self.optimizer.step()
             logging.info('Local Training Epoch: {} {}-th iters\t Loss: {:.6f}'.format(epoch_idx,
                                                                                       batch_idx, loss.item()))
 
     def eval_impl(self, epoch_idx):
+        """每迭代一定次数进行一次客户端上的对测试机和训练集的性能评估"""
         # train
         if epoch_idx % self.args.frequency_of_train_acc_report == 0:
             self.test_on_all_clients(b_is_train=True, epoch_idx=epoch_idx)
@@ -64,6 +76,7 @@ class CentralizedTrainer(object):
             self.test_on_all_clients(b_is_train=False, epoch_idx=epoch_idx)
 
     def test_on_all_clients(self, b_is_train, epoch_idx):
+        """对所有客户端进行性能评估"""
         self.model.eval()
         metrics = {
             'test_correct': 0,
@@ -72,17 +85,21 @@ class CentralizedTrainer(object):
             'test_recall': 0,
             'test_total': 0
         }
+
+        # b_is_train代表使用训练集或测试集评估
         if b_is_train:
             test_data = self.train_global
         else:
             test_data = self.test_global
-        with torch.no_grad():
+        with torch.no_grad():  # 上下文管理器，被该语句包裹起来的部分将不会track梯度（不参与计算图的构建，不会被记录用于反向传播）
             for batch_idx, (x, target) in enumerate(test_data):
+                # 封装数据，计算梯度，反向传播得到概率分布，计算损失函数
                 x = x.to(self.device)
                 target = target.to(self.device)
                 pred = self.model(x)
                 loss = self.criterion(pred, target)
 
+                # 对数据集是stackoverflow进行特定处理，为啥特定处理？
                 if self.args.dataset == "stackoverflow_lr":
                     predicted = (pred > .5).int()
                     correct = predicted.eq(target).sum(axis=-1).eq(target.size(1)).sum()
@@ -98,12 +115,15 @@ class CentralizedTrainer(object):
                 metrics['test_correct'] += correct.item()
                 metrics['test_loss'] += loss.item() * target.size(0)
                 metrics['test_total'] += target.size(0)
+        # rank是否代表是否保存评估日志？
         if self.args.rank == 0:
             self.save_log(b_is_train=b_is_train, metrics=metrics, epoch_idx=epoch_idx)
 
     def save_log(self, b_is_train, metrics, epoch_idx):
+        """保存性能评估日志，最终输出到wandb上"""
         prefix = 'Train' if b_is_train else 'Test'
 
+        # 记录各次评估的参数情况
         all_metrics = {
             'num_samples': [],
             'num_correct': [],
@@ -120,7 +140,7 @@ class CentralizedTrainer(object):
             all_metrics['precisions'].append(copy.deepcopy(metrics['test_precision']))
             all_metrics['recalls'].append(copy.deepcopy(metrics['test_recall']))
 
-        # performance on all clients
+        # performance on all clients，计算客户端上的性能表现（百分比）
         acc = sum(all_metrics['num_correct']) / sum(all_metrics['num_samples'])
         loss = sum(all_metrics['losses']) / sum(all_metrics['num_samples'])
         precision = sum(all_metrics['precisions']) / sum(all_metrics['num_samples'])
