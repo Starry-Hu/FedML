@@ -29,7 +29,7 @@ class ClientDSGD(object):
         self.learning_rate = learning_rate
         self.iteration_number = iteration_number
         # TODO:
-        self.latency = random.uniform(0, latency)
+        self.latency = random.uniform(0, latency)  # 延迟，等待时间
 
         self.batch_size = batch_size
         self.loss_in_each_iteration = []

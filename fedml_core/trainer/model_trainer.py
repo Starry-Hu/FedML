@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 
 class ModelTrainer(ABC):
-    """Abstract base class for federated learning trainer.
+    """Abstract base class for federated learning trainer.【抽象模型训练器，适用于多个深度学习框架】
        1. The goal of this abstract class is to be compatible to
        any deep learning frameworks such as PyTorch, TensorFlow, Keras, MXNET, etc.
        2. This class can be used in both server and client side

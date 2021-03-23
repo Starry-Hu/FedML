@@ -34,7 +34,7 @@ def non_iid_partition_with_dirichlet_distribution(label_list,
                 The drawn samples, of shape ``(size, k)``.
     """
     net_dataidx_map = {}
-    K = classes
+    K = classes  # 分类数或者检测的类别列表
 
     # For multiclass labels, the list is ragged and not a numpy array
     N = len(label_list) if task == 'segmentation' else label_list.shape[0]
@@ -42,10 +42,11 @@ def non_iid_partition_with_dirichlet_distribution(label_list,
     # guarantee the minimum number of sample in each client
     min_size = 0
     while min_size < 10:
-        idx_batch = [[] for _ in range(client_num)]
+        idx_batch = [[] for _ in range(client_num)]  # 获取客户端id批次
 
-        if task == 'segmentation':
+        if task == 'segmentation':  # 目标检测问题，允许一个实例有多个类别
             # Unlike classification tasks, here, one instance may have multiple categories/classes
+            # 遍历每个类别，将属于该类别category的标签获取到并组恒一个
             for c, cat in enumerate(classes):
                 if c > 0:
                     idx_k = np.asarray([np.any(label_list[i] == cat) and not np.any(
@@ -60,7 +61,7 @@ def non_iid_partition_with_dirichlet_distribution(label_list,
                 idx_batch, min_size = partition_class_samples_with_dirichlet_distribution(N, alpha, client_num,
                                                                                           idx_batch, idx_k)
         else:
-            # for each classification in the dataset
+            # for each classification in the dataset，对于分类问题只需要对每个类遍历看是否与标签相同
             for k in range(K):
                 # get a list of batch indexes which are belong to label k
                 idx_k = np.where(label_list == k)[0]
@@ -74,6 +75,7 @@ def non_iid_partition_with_dirichlet_distribution(label_list,
 
 
 def partition_class_samples_with_dirichlet_distribution(N, alpha, client_num, idx_batch, idx_k):
+    """使用dirichlet分布确定每个客户端的数据不平衡比例"""
     np.random.shuffle(idx_k)
     # using dirichlet distribution to determine the unbalanced proportion for each client (client_num in total)
     # e.g., when client_num = 4, proportions = [0.29543505 0.38414498 0.31998781 0.00043216], sum(proportions) = 1

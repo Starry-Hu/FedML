@@ -30,7 +30,9 @@ class FedAvgAPI(object):
         self._setup_clients(train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer)
 
     def _setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict, model_trainer):
+        """启动某轮次的客户端"""
         logging.info("############setup_clients (START)#############")
+        # 根据每轮参与的客户端数量生成相应个数的客户端填充到列表中【一般是生成所有参与的客户端，之后选择一部分进行优化】
         for client_idx in range(self.args.client_num_per_round):
             c = Client(client_idx, train_data_local_dict[client_idx], test_data_local_dict[client_idx],
                        train_data_local_num_dict[client_idx], self.args, self.device, model_trainer)
@@ -38,6 +40,7 @@ class FedAvgAPI(object):
         logging.info("############setup_clients (END)#############")
 
     def train(self):
+        """获得全局参数（全局模型），在每个轮次中对参与的客户端采样，进行训练"""
         w_global = self.model_trainer.get_model_params()
         for round_idx in range(self.args.comm_round):
 
@@ -49,13 +52,15 @@ class FedAvgAPI(object):
             for scalability: following the original FedAvg algorithm, we uniformly sample a fraction of clients in each round.
             Instead of changing the 'Client' instances, our implementation keeps the 'Client' instances and then updates their local dataset 
             """
+            # 采样选择本轮参与优化的客户端id索引
             client_indexes = self._client_sampling(round_idx, self.args.client_num_in_total,
                                                    self.args.client_num_per_round)
             logging.info("client_indexes = " + str(client_indexes))
 
+            # 遍历客户端列表，对被采样的客户端【感觉不是很有必要遍历？】
             for idx, client in enumerate(self.client_list):
                 # update dataset
-                client_idx = client_indexes[idx]
+                client_idx = client_indexes[idx]  # 根据遍历得到的客户端id，去获取对应的采样id并将相关的数据更新到该客户端上
                 client.update_local_dataset(client_idx, self.train_data_local_dict[client_idx],
                                             self.test_data_local_dict[client_idx],
                                             self.train_data_local_num_dict[client_idx])
@@ -81,8 +86,11 @@ class FedAvgAPI(object):
                     self._local_test_on_all_clients(round_idx)
 
     def _client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
+        # 对某轮次中参与的客户端进行采样，选择该轮次中参与优化的客户端集
+        # 如果所有客户端都参与了，则不用采样、全部参与优化（？为啥）
         if client_num_in_total == client_num_per_round:
             client_indexes = [client_index for client_index in range(client_num_in_total)]
+        # 否则选择两者的最小数目作为采样数目，从总的客户端中进行抽样（？？）
         else:
             num_clients = min(client_num_per_round, client_num_in_total)
             np.random.seed(round_idx)  # make sure for each comparison, we are selecting the same clients each round
@@ -91,13 +99,15 @@ class FedAvgAPI(object):
         return client_indexes
 
     def _generate_validation_set(self, num_samples=10000):
+        """从全局测试数据中生成验证集"""
         test_data_num  = len(self.test_global.dataset)
         sample_indices = random.sample(range(test_data_num), min(num_samples, test_data_num))
-        subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)
-        sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)
+        subset = torch.utils.data.Subset(self.test_global.dataset, sample_indices)  # 根据采样索引获取采样的测试数据集
+        sample_testset = torch.utils.data.DataLoader(subset, batch_size=self.args.batch_size)  # 将采样的测试数据分批次
         self.val_global = sample_testset
 
     def _aggregate(self, w_locals):
+        """聚合各个客户端的更新"""
         training_num = 0
         for idx in range(len(w_locals)):
             (sample_num, averaged_params) = w_locals[idx]

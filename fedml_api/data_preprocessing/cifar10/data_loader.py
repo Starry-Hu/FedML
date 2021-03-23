@@ -13,6 +13,11 @@ logger.setLevel(logging.INFO)
 
 
 # generate the non-IID distribution for all methods
+"""
+参考FedML开山之作：Communication-Efficient Learning of Deep Networks from Decentralized Data
+600个数据分配到100个客户端中：根据数字标签对数据进行排序，将其分成200个大小为300的分区，并为每个客户端分配2个分区
+每个客户端只占了两个分区形成non-iid
+"""
 def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
     distribution = {}
     with open(filename, 'r') as data:

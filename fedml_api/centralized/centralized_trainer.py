@@ -57,7 +57,7 @@ class CentralizedTrainer(object):
             log_probs = self.model(x)
             # 步骤4：计算损失函数。( Torch需要将目标单词封装在变量中：loss = loss_function(log_probs, autograd.Variable(
             #             torch.LongTensor([word_to_ix[target]]))))
-            # 也有使用交叉熵的criterion
+            # 此处使用交叉熵损失函数(criterion)
             loss = self.criterion(log_probs, labels)
             # 步骤5：反向传播并更新梯度
             loss.backward()

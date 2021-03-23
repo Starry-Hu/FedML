@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 
+"""改天看一下视频，理解pytorch中RNN的使用"""
 class RNN_OriginalFedAvg(nn.Module):
     """Creates a RNN model using LSTM layers for Shakespeare language models (next character prediction task).
       This replicates the model structure in the paper:
@@ -17,6 +18,7 @@ class RNN_OriginalFedAvg(nn.Module):
 
     def __init__(self, embedding_dim=8, vocab_size=90, hidden_size=256):
         super(RNN_OriginalFedAvg, self).__init__()
+        # 简单的存储固定大小的词典的嵌入向量的查找表：给一个编号，嵌入层就能返回这个编号对应的嵌入向量（反映各个编号符号的语义关系）
         self.embeddings = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_size, num_layers=2, batch_first=True)
         self.fc = nn.Linear(hidden_size, vocab_size)
