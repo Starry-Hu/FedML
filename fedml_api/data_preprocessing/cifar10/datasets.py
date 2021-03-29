@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import torch.utils.data as data
+
 from PIL import Image
 from torchvision.datasets import CIFAR10
 
@@ -13,7 +14,11 @@ IMG_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tif
 
 
 def accimage_loader(path):
-    import accimage
+    # 使用torchvision激活acciamge（否则报错包不存在）
+    import torchvision
+    accimage = torchvision.set_image_backend('accimage')
+
+    # import accimage
     try:
         return accimage.Image(path)
     except IOError:
@@ -36,6 +41,7 @@ def default_loader(path):
         return pil_loader(path)
 
 
+# 将cifar10数据进行截断
 class CIFAR10_truncated(data.Dataset):
 
     def __init__(self, root, dataidxs=None, train=True, transform=None, target_transform=None, download=False):

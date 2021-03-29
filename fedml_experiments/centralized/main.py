@@ -54,7 +54,7 @@ def add_args(parser):
     parser.add_argument('--dataset', type=str, default='cifar10', metavar='N',
                         help='dataset used for training')
 
-    parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
+    parser.add_argument('--data_dir', type=str, default='./../../data/cifar10',  # 此处应该是三级
                         help='data directory')
 
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
@@ -63,8 +63,8 @@ def add_args(parser):
     parser.add_argument('--partition_alpha', type=float, default=0.5, metavar='PA',
                         help='partition alpha (default: 0.5)')
 
-    parser.add_argument('--client_num_in_total', type=int, default=1000, metavar='NN',
-                        help='number of workers in a distributed cluster')
+    parser.add_argument('--client_num_in_total', type=int, default=35, metavar='NN',
+                        help='number of workers in a distributed cluster')  # 测试：修改默认值为20，原来为1000
 
     parser.add_argument('--client_num_per_round', type=int, default=4, metavar='NN',
                         help='number of workers')
@@ -118,6 +118,7 @@ def add_args(parser):
     return args
 
 
+# 根据数据集名称，调用不同data_preprocessing中不同的data.loader装载数据
 def load_data(args, dataset_name):
     if dataset_name == "mnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -358,9 +359,9 @@ if __name__ == "__main__":
     # machine 3: worker2, worker6;
     # machine 4: worker3, worker7;
     # Therefore, we can see that workers are assigned according to the order of machine list.
-    logging.info("process_id = %d, size = %d" % (process_id, args.world_size))
+    logging.info("process_id = %d, size = %d" % (process_id, args.world_size))  # world_size表示gpu数量？
 
-    # load data
+    # load data，装载成数据集[训练数据大小，测试数据大小，训练数据批情况，测试数据批情况，各客户端训练数据大小映射，各客户端本地训练数据批情况，各客户端本地测试数据批情况，类别数]
     dataset = load_data(args, args.dataset)
     [train_data_num, test_data_num, train_data_global, test_data_global,
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num] = dataset
@@ -370,6 +371,7 @@ if __name__ == "__main__":
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
     model = create_model(args, model_name=args.model, output_dim=dataset[7])
 
+    # 确定device值（cpu/gpu）
     if args.data_parallel == 1:
         device = torch.device("cuda:" + str(gpu_util[args.rank]))
         model.to(device)

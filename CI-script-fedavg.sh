@@ -6,12 +6,10 @@ set -ex
 pyflakes .
 
 # activate the fedml environment
-#source "$HOME/miniconda/etc/profile.d/conda.sh"
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
+source "$HOME/miniconda/etc/profile.d/conda.sh"
 conda activate fedml
 
-#wandb login ee0b5f53d949c84cee7decbe7a629e63fb2f8408
-wandb login 00aaa76a2a52066c3f268386091b9fb399eea388
+wandb login ee0b5f53d949c84cee7decbe7a629e63fb2f8408
 wandb off
 
 assert_eq() {
@@ -35,34 +33,34 @@ cd ./fedml_experiments/standalone/fedavg
 sh run_fedavg_standalone_pytorch.sh 0 2 2 4 cifar10 ./../../../data/cifar10 lr hetero 1 1 0.03 sgd 1
 
 
-## 1. MNIST standalone FedAvg
-#cd ./fedml_experiments/standalone/fedavg
-#sh run_fedavg_standalone_pytorch.sh 0 2 2 4 mnist ./../../../data/mnist lr hetero 1 1 0.03 sgd 1
-#sh run_fedavg_standalone_pytorch.sh 0 2 2 4 shakespeare ./../../../data/shakespeare rnn hetero 1 1 0.8 sgd 1
-#sh run_fedavg_standalone_pytorch.sh 0 2 2 4 femnist ./../../../data/FederatedEMNIST/datasets cnn hetero 1 1 0.03 sgd 1
-#sh run_fedavg_standalone_pytorch.sh 0 2 2 4 fed_shakespeare ./../../../data/fed_shakespeare/datasets rnn hetero 1 1 0.8 sgd 1
-#sh run_fedavg_standalone_pytorch.sh 0 2 2 4 fed_cifar100 ./../../../data/fed_cifar100/datasets resnet18_gn hetero 1 1 0.03 adam 1
-##sh run_fedavg_standalone_pytorch.sh 0 1 1 4 stackoverflow_lr ./../../../data/stackoverflow/datasets lr hetero 1 1 0.03 sgd 1
-##sh run_fedavg_standalone_pytorch.sh 0 1 1 4 stackoverflow_nwp ./../../../data/stackoverflow/datasets cnn hetero 1 1 0.03 sgd 1
-#
-## assert that, for full batch and epochs=1, the accuracy of federated training(FedAvg) is equal to that of centralized training
-#sh run_fedavg_standalone_pytorch.sh 0 1 1 -1 mnist ./../../../data/mnist lr hetero 10 1 0.03 sgd 0
-#centralized_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
-#sh run_fedavg_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 10 1 0.03 sgd 0
-#federated_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
-#assert_eq $(round $centralized_full_train_acc 3) $(round $federated_full_train_acc 3)
-#cd ./../../../
-#
-## assert that, for full batch and epochs=1 and when the product of global and group comm. round is fixed,
-## the accuracy of hierarchical federated learning is equal to that of centralized training, regardless of the number of groups
-#cd ./fedml_experiments/standalone/hierarchical_fl
-#sh run_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 0.03 sgd random 2 5 2 1
-#hierarchical_fl_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
-#assert_eq $(round $centralized_full_train_acc 3) $(round $hierarchical_fl_full_train_acc 3)
-#sh run_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 0.03 sgd random 2 2 5 1
-#hierarchical_fl_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
-#assert_eq $(round $centralized_full_train_acc 3) $(round $hierarchical_fl_full_train_acc 3)
-#cd ./../../../
+# 1. MNIST standalone FedAvg
+cd ./fedml_experiments/standalone/fedavg
+sh run_fedavg_standalone_pytorch.sh 0 2 2 4 mnist ./../../../data/mnist lr hetero 1 1 0.03 sgd 1
+sh run_fedavg_standalone_pytorch.sh 0 2 2 4 shakespeare ./../../../data/shakespeare rnn hetero 1 1 0.8 sgd 1
+sh run_fedavg_standalone_pytorch.sh 0 2 2 4 femnist ./../../../data/FederatedEMNIST/datasets cnn hetero 1 1 0.03 sgd 1
+sh run_fedavg_standalone_pytorch.sh 0 2 2 4 fed_shakespeare ./../../../data/fed_shakespeare/datasets rnn hetero 1 1 0.8 sgd 1
+sh run_fedavg_standalone_pytorch.sh 0 2 2 4 fed_cifar100 ./../../../data/fed_cifar100/datasets resnet18_gn hetero 1 1 0.03 adam 1
+#sh run_fedavg_standalone_pytorch.sh 0 1 1 4 stackoverflow_lr ./../../../data/stackoverflow/datasets lr hetero 1 1 0.03 sgd 1
+#sh run_fedavg_standalone_pytorch.sh 0 1 1 4 stackoverflow_nwp ./../../../data/stackoverflow/datasets cnn hetero 1 1 0.03 sgd 1
+
+# assert that, for full batch and epochs=1, the accuracy of federated training(FedAvg) is equal to that of centralized training
+sh run_fedavg_standalone_pytorch.sh 0 1 1 -1 mnist ./../../../data/mnist lr hetero 10 1 0.03 sgd 0
+centralized_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
+sh run_fedavg_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 10 1 0.03 sgd 0
+federated_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
+assert_eq $(round $centralized_full_train_acc 3) $(round $federated_full_train_acc 3)
+cd ./../../../
+
+# assert that, for full batch and epochs=1 and when the product of global and group comm. round is fixed,
+# the accuracy of hierarchical federated learning is equal to that of centralized training, regardless of the number of groups
+cd ./fedml_experiments/standalone/hierarchical_fl
+sh run_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 0.03 sgd random 2 5 2 1
+hierarchical_fl_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
+assert_eq $(round $centralized_full_train_acc 3) $(round $hierarchical_fl_full_train_acc 3)
+sh run_standalone_pytorch.sh 0 1000 1000 -1 mnist ./../../../data/mnist lr hetero 0.03 sgd random 2 2 5 1
+hierarchical_fl_full_train_acc=$(cat wandb/latest-run/files/wandb-summary.json | python -c "import sys, json; print(json.load(sys.stdin)['Train/Acc'])")
+assert_eq $(round $centralized_full_train_acc 3) $(round $hierarchical_fl_full_train_acc 3)
+cd ./../../../
 
 
 # 2. MNIST distributed FedAvg
