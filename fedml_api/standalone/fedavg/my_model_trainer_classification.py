@@ -33,6 +33,7 @@ class MyModelTrainer(ModelTrainer):
             batch_loss = []
             for batch_idx, (x, labels) in enumerate(train_data):
                 x, labels = x.to(device), labels.to(device)
+                labels = labels.long()  # fix bug：转化为long类型，否则计算损失函数出错
                 # logging.info("x.size = " + str(x.size()))
                 # logging.info("labels.size = " + str(labels.size()))
                 model.zero_grad()
@@ -70,6 +71,7 @@ class MyModelTrainer(ModelTrainer):
             for batch_idx, (x, target) in enumerate(test_data):
                 x = x.to(device)
                 target = target.to(device)
+                target = target.long()  # fix bug：转化为long类型，否则计算损失函数出错
                 pred = model(x)
                 loss = criterion(pred, target)
 

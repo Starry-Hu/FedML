@@ -92,12 +92,12 @@ def add_args(parser):
 
 
 def load_data(args, dataset_name):
-    # check if the centralized training is enabled
+    # check if the centralized training is enabled（如果总共只有一个设备参与，则认为是中心化训练）
     centralized = True if args.client_num_in_total == 1 else False
 
     # check if the full-batch training is enabled
     args_batch_size = args.batch_size
-    if args.batch_size <= 0:
+    if args.batch_size <= 0: # 为什么是<=0？
         full_batch = True
         args.batch_size = 128  # temporary batch size
     else:
@@ -204,6 +204,7 @@ def load_data(args, dataset_name):
         class_num = data_loader(args.dataset, args.data_dir, args.partition_method,
                                 args.partition_alpha, args.client_num_in_total, args.batch_size)
 
+    # 如果是中心化训练(只有一个设备参与)，修改客户端本地数据映射字典，全部映射到0号
     if centralized:
         train_data_local_num_dict = {
             0: sum(user_train_data_num for user_train_data_num in train_data_local_num_dict.values())}
@@ -213,6 +214,7 @@ def load_data(args, dataset_name):
             0: [batch for cid in sorted(test_data_local_dict.keys()) for batch in test_data_local_dict[cid]]}
         args.client_num_in_total = 1
 
+    # 如果是全批次训练，则
     if full_batch:
         train_data_global = combine_batches(train_data_global)
         test_data_global = combine_batches(test_data_global)
