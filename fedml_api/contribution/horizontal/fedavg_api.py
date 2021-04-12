@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import wandb
 
-from fedml_api.standalone.fedavg.client import Client
+from fedml_api.contribution.horizontal.client import Client
 
 
 class FedAvgAPI(object):
@@ -170,7 +170,7 @@ class FedAvgAPI(object):
                                         self.test_data_local_dict[client_idx],
                                         self.train_data_local_num_dict[client_idx])
             # train data
-            train_local_metrics = client.local_test(False)
+            train_local_metrics = client.local_test(False)  # 原：false
             train_metrics['num_samples'].append(copy.deepcopy(train_local_metrics['test_total']))
             train_metrics['num_correct'].append(copy.deepcopy(train_local_metrics['test_correct']))
             train_metrics['losses'].append(copy.deepcopy(train_local_metrics['test_loss']))
@@ -263,15 +263,15 @@ class FedAvgAPI(object):
                                             self.train_data_local_num_dict[client_idx])
 
                 # train on new dataset
-                # w = client.train(w_global)
+                w = client.train(w_global)
                 # self.logger.info("local weights = " + str(w))
                 logging.info(
                     "client_idx: {}, iteration: {}-th, local weights have been trained. ".format(client_idx, round_idx))
-                # w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
+                w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
 
             # update global weights
-            # w_global = self._aggregate(w_locals)
-            # self.model_trainer.set_model_params(w_global)
+            w_global = self._aggregate(w_locals)
+            self.model_trainer.set_model_params(w_global)
 
             # test results
             # at last round, return Y
@@ -283,3 +283,50 @@ class FedAvgAPI(object):
                     self._local_test_on_validation_set(round_idx)
                 else:
                     self._local_test_on_all_clients(round_idx)
+
+    # 在测试数据集上进行预测
+    def predict_on_test(self):
+        logging.info("################predict on test data")
+
+        test_metrics = {
+            'y_true': [],
+            'y_pred': [],
+            'y_predicted': []
+        }
+
+        # 基准参与客户端，用来更新数据、进行处理
+        client = self.client_list[0]
+
+        for client_idx in range(self.args.client_num_in_total):
+            """
+            Note: for datasets like "fed_CIFAR100" and "fed_shakespheare",
+            the training client number is larger than the testing client number
+            """
+            # 如果该客户端没有本地测试数据映射，则跳过
+            if self.test_data_local_dict[client_idx] is None:
+                continue
+            client.update_local_dataset(0, self.train_data_local_dict[client_idx],
+                                        self.test_data_local_dict[client_idx],
+                                        self.train_data_local_num_dict[client_idx])
+            # predict
+            test_local_metrics = client.predict_on_test()
+            test_metrics['y_true'].append(copy.deepcopy(test_local_metrics['y_true']))
+            test_metrics['y_pred'].append(copy.deepcopy(test_local_metrics['y_pred']))
+            test_metrics['y_predicted'].append(copy.deepcopy(test_local_metrics['y_predicted']))
+
+            """
+            Note: CI environment is CPU-based computing. 
+            The training speed for RNN training is to slow in this setting, so we only test a client to make sure there is no programming error.
+            """
+            if self.args.ci == 1:
+                break
+
+
+        # test on test dataset
+
+        # stats = {'test_acc': test_acc, 'test_loss': test_loss}
+        # wandb.log({"Test/Acc": test_acc, "round": round_idx})
+        # wandb.log({"Test/Loss": test_loss, "round": round_idx})
+        # logging.info(stats)
+
+        return test_metrics

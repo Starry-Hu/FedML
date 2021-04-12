@@ -23,6 +23,7 @@ def read_data(train_data_dir, test_data_dir):
     groups = []
     train_data = {}
     test_data = {}
+    cdata = {}  # 初始化，存储读取的json数据，三个字段：num_sample每个用户的样本数、users用户名、user_data每个用户名对应的xy
 
     train_files = os.listdir(train_data_dir)
     train_files = [f for f in train_files if f.endswith('.json')]
@@ -83,6 +84,7 @@ def load_partition_data_mnist_by_device_id(batch_size,
     return load_partition_data_mnist(batch_size, train_path, test_path)
 
 
+# 进行数据划分批次
 def load_partition_data_mnist(batch_size,
                               train_path="./../../../data/MNIST/train",
                               test_path="./../../../data/MNIST/test"):
@@ -105,7 +107,7 @@ def load_partition_data_mnist(batch_size,
         test_data_num += user_test_data_num
         train_data_local_num_dict[client_idx] = user_train_data_num
 
-        # transform to batches
+        # transform to batches【处理完之后都变成0了？？】
         train_batch = batch_data(train_data[u], batch_size)
         test_batch = batch_data(test_data[u], batch_size)
 

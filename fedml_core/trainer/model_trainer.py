@@ -36,3 +36,6 @@ class ModelTrainer(ABC):
     def test_on_the_server(self, train_data_local_dict, test_data_local_dict, device, args=None) -> bool:
         pass
 
+    @abstractmethod
+    def predict(self, test_loader, device):
+        pass
