@@ -21,6 +21,6 @@ if __name__ == '__main__':
     for batch in range(len(base_pred)):
         instance_num += base_pred[batch].size()[0]
         batch_one = torch.sum(torch.abs(base_pred[batch] - delete_pred[batch]))
-        batch_sum = torch.cat((batch_sum, torch.tensor([batch_one]), 0))
+        batch_sum = torch.cat((batch_sum, torch.tensor([batch_one])), 0)
     result = torch.sum(batch_sum) / instance_num
     print(result)

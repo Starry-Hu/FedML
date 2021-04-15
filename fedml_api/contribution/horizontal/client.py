@@ -46,3 +46,6 @@ class Client:
     def predict_on_test(self):
         metrics = self.model_trainer.predict(self.local_test_data, self.device)
         return metrics
+
+    def show(self):
+        return self.model_trainer.show(self.local_test_data)

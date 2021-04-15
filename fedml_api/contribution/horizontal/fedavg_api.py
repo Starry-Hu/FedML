@@ -5,6 +5,7 @@ import random
 import numpy as np
 import torch
 import wandb
+import shap
 
 from fedml_api.contribution.horizontal.client import Client
 
@@ -330,3 +331,38 @@ class FedAvgAPI(object):
         # logging.info(stats)
 
         return test_metrics
+
+    def show(self):
+        client = self.client_list[0]
+
+        for client_idx in range(self.args.client_num_in_total):
+            if self.test_data_local_dict[client_idx] is None:
+                continue
+            client.update_local_dataset(0, self.train_data_local_dict[client_idx],
+                                        self.test_data_local_dict[client_idx],
+                                        self.train_data_local_num_dict[client_idx])
+
+            test_images, background = client.show()  # 都是tensor(1,784)
+            # print(type(self.model_trainer.model))
+
+            # e = shap.LinearExplainer(self.model_trainer.model, background, feature_dependence="independent")
+            e = shap.DeepExplainer(self.model_trainer.model, background)
+            shap_values = e.shap_values(background)  # list 10, 每个里面[1,784]  test_images
+
+            # 显示1
+            print(len(test_images))
+            print(shap_values[0].shape[1])
+
+            shap_numpy = [np.swapaxes(s, 0, 1) for s in shap_values]  # 调转维度, list 10, 每个里面[784,1]，表示阴影结果图片
+            test_numpy = np.swapaxes(test_images.numpy(), 0, 1)  # [784,1]的数组，表示被测图片，对应上shap_numpy的每个元素的大小
+
+            # r = shap.force_plot(e.expected_value[0], shap_values[0], test_numpy)
+
+            # 图片和shapely value的显示
+
+
+            # shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]  #
+            # test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
+
+            # plot the feature attributions
+            r = shap.image_plot(shap_numpy, -test_numpy)

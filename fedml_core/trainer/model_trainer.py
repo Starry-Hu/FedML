@@ -39,3 +39,7 @@ class ModelTrainer(ABC):
     @abstractmethod
     def predict(self, test_loader, device):
         pass
+
+    @abstractmethod
+    def show(self, test_loader):
+        pass

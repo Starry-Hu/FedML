@@ -23,10 +23,12 @@ from fedml_api.data_preprocessing.Landmarks.data_loader import load_partition_da
 from fedml_api.model.cv.mobilenet import mobilenet
 from fedml_api.model.cv.resnet import resnet56
 from fedml_api.model.cv.cnn import CNN_DropOut
+from fedml_api.model.cv.cnn import CNN_MNIST_torch  # test
 from fedml_api.data_preprocessing.FederatedEMNIST.data_loader import load_partition_data_federated_emnist
 from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg, RNN_StackOverFlow
 
 from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
+from fedml_api.data_preprocessing.MNIST_test.data_loader import load_partition_data_mnist_asign  # test mnist
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 
@@ -50,10 +52,10 @@ def add_args(parser):
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--model', type=str, default='lr', metavar='N',
+    parser.add_argument('--model', type=str, default='cnn', metavar='N',
                         help='neural network used in training')  # 默认：resnet56
 
-    parser.add_argument('--dataset', type=str, default='mnist', metavar='N',
+    parser.add_argument('--dataset', type=str, default='mnist_test', metavar='N',
                         help='dataset used for training')  # 默认：cifar10
 
     parser.add_argument('--data_dir', type=str, default='./../../../data/MNIST',
@@ -121,6 +123,19 @@ def load_data(args, dataset_name):
         we uniformly sample a fraction of clients each round (as the original FedAvg paper)
         """
         args.client_num_in_total = client_num
+    elif dataset_name == "mnist_test":
+        logging.info("load_data. dataset_name = %s" % dataset_name)
+        # 使用自带的dataloader方法进行划分
+        # client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
+        # train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        # class_num = load_partition_data_mnist(args.batch_size)
+        # args.client_num_in_total = client_num
+
+        # 更具有灵活性的指定，进行数据划分
+        train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num = load_partition_data_mnist_asign(args.dataset, args.data_dir, args.partition_method,
+                                                    args.partition_alpha, args.client_num_in_total, args.batch_size)
 
     elif dataset_name == "femnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -251,6 +266,9 @@ def create_model(args, model_name, output_dim):
     if model_name == "lr" and args.dataset == "mnist":
         logging.info("LogisticRegression + MNIST")
         model = LogisticRegression(28 * 28, output_dim)
+    elif model_name == "cnn" and args.dataset == "mnist_test":
+        logging.info("CNN + MNIST_test")
+        model = CNN_MNIST_torch()
     elif model_name == "cnn" and args.dataset == "femnist":
         logging.info("CNN + FederatedEMNIST")
         model = CNN_DropOut(False)
@@ -325,6 +343,10 @@ if __name__ == "__main__":
     fedavgAPI = FedAvgAPI(dataset, device, args, model_trainer)
     fedavgAPI.train()
     base_metrics = fedavgAPI.predict_on_test()
+
+
+    # 测试shap
+    fedavgAPI.show()
 
     # 删除法：计算横向联邦学习中每个客户端的贡献量
     # 通过删除客户端再训练模型，并对测试数据进行预测

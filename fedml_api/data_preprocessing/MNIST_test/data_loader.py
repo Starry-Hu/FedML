@@ -5,21 +5,16 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-from .datasets import CIFAR10_truncated
+from .datasets import MNIST_truncated
 
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # generate the non-IID distribution for all methods
-"""
-参考：Communication-Efficient Learning of Deep Networks from Decentralized Data
-600个数据分配到100个客户端中：根据数字标签对数据进行排序，将其分成200个大小为300的分区，并为每个客户端分配2个分区
-每个客户端只占了两个分区形成non-iid
-"""
 
 
-def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'):
+def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/MNIST/distribution.txt'):
     distribution = {}
     with open(filename, 'r') as data:
         for x in data.readlines():
@@ -34,7 +29,7 @@ def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/C
     return distribution
 
 
-def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'):
+def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/MNIST/net_dataidx_map.txt'):
     net_dataidx_map = {}
     with open(filename, 'r') as data:
         for x in data.readlines():
@@ -83,38 +78,39 @@ class Cutout(object):
         return img
 
 
-# 对cifar数据进行转换（读取）
-def _data_transforms_cifar10():
-    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+# 对MNIST数据进行转换（读取）
+def _data_transforms_mnist():
+    MNIST_MEAN = (0.1307,)
+    MNIST_STD = (0.3081,)
 
     train_transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+        transforms.Normalize(MNIST_MEAN, MNIST_STD),
     ])
 
     train_transform.transforms.append(Cutout(16))
 
     valid_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+        transforms.Normalize(MNIST_MEAN, MNIST_STD),
     ])
 
     return train_transform, valid_transform
 
 
 # 从数据所在路径进行加载，并将数据截断为训练集和测试集，然后取各自集合的数据和标签进行返回
-def load_cifar10_data(datadir):
-    train_transform, test_transform = _data_transforms_cifar10()
+def load_mnist_data(datadir):
+    train_transform, test_transform = _data_transforms_mnist()
 
-    cifar10_train_ds = CIFAR10_truncated(datadir, train=True, download=True, transform=train_transform)
-    cifar10_test_ds = CIFAR10_truncated(datadir, train=False, download=True)
+    # 若路径中已有文件则可以跳过下载，直接打包
+    mnist_train_ds = MNIST_truncated(datadir, train=True, download=True, transform=train_transform)
+    mnist_test_ds = MNIST_truncated(datadir, train=False, download=True, transform=test_transform)
 
-    X_train, y_train = cifar10_train_ds.data, cifar10_train_ds.target
-    X_test, y_test = cifar10_test_ds.data, cifar10_test_ds.target
+    X_train, y_train = mnist_train_ds.data, mnist_train_ds.target
+    X_test, y_test = mnist_test_ds.data, mnist_test_ds.target
 
     return (X_train, y_train, X_test, y_test)
 
@@ -122,7 +118,7 @@ def load_cifar10_data(datadir):
 # 根据模式、总的客户端数量大小、划分比率划分数据集：训练集、测试集
 def partition_data(dataset, datadir, partition, n_nets, alpha):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cifar10_data(datadir)
+    X_train, y_train, X_test, y_test = load_mnist_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
 
@@ -160,12 +156,12 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
             net_dataidx_map[j] = idx_batch[j]
 
     elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/net_dataidx_map.txt'
+        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/mnist/net_dataidx_map.txt'
         net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
     # 确定每个客户端的每一类训练数据集大小
     if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/CIFAR10/distribution.txt'
+        distribution_file_path = './data_preprocessing/non-iid-distribution/mnist/distribution.txt'
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
@@ -175,19 +171,19 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
 
 # for centralized training
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
-    return get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs)
+    return get_dataloader_mnist(datadir, train_bs, test_bs, dataidxs)
 
 
 # for local devices
 def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dataidxs_test):
-    return get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
+    return get_dataloader_test_mnist(datadir, train_bs, test_bs, dataidxs_train, dataidxs_test)
 
 
-# 对cifar10进行数据批处理，
-def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
-    dl_obj = CIFAR10_truncated
+# 对mnist进行数据批处理，
+def get_dataloader_mnist(datadir, train_bs, test_bs, dataidxs=None):
+    dl_obj = MNIST_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_mnist()
 
     # dataset：训练数据若指明某客户端则是单个本地，否则是全局；但测试数据一直获取的是全局（所有客户端都对他们测试）
     train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
@@ -200,10 +196,10 @@ def get_dataloader_CIFAR10(datadir, train_bs, test_bs, dataidxs=None):
     return train_dl, test_dl
 
 
-def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = CIFAR10_truncated
+def get_dataloader_test_mnist(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
+    dl_obj = MNIST_truncated
 
-    transform_train, transform_test = _data_transforms_cifar10()
+    transform_train, transform_test = _data_transforms_mnist()
 
     train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True, transform=transform_train, download=True)
     test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False, transform=transform_test, download=True)
@@ -214,7 +210,7 @@ def get_dataloader_test_CIFAR10(datadir, train_bs, test_bs, dataidxs_train=None,
     return train_dl, test_dl
 
 
-def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, partition_method, partition_alpha,
+def load_partition_data_distributed_mnist(process_id, dataset, data_dir, partition_method, partition_alpha,
                                             client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
@@ -249,7 +245,7 @@ def load_partition_data_distributed_cifar10(process_id, dataset, data_dir, parti
 
 
 # 加载数据并进行划分，最后将划分后的数据装载到各个客户端上
-def load_partition_data_cifar10(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
+def load_partition_data_mnist_asign(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,

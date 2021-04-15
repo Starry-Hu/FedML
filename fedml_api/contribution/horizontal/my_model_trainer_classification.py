@@ -127,3 +127,31 @@ class MyModelTrainer(ModelTrainer):
         # _, y_pred = torch.max(all_outputs, 1)
         # y_pred_prob = F.softmax(all_outputs, dim=1)
         # return y_true, y_pred, y_pred_prob
+
+    def show(self, test_loader):
+        import numpy as np
+        batch = next(iter(test_loader))
+        images, _ = batch
+        inds = np.random.choice(images.shape[0], 1, replace=False)
+
+        background = images[0:1]
+        test_images = images[1:]
+
+        return background,test_images
+
+        # next_x, _ = next(iter(test_loader))
+        # print(next_x.shape)
+        # np.random.seed(0)
+        # inds = np.random.choice(next_x.shape[0], 1, replace=False)
+        # e = shap.DeepExplainer(test_loader, next_x[inds, :])
+        # test_x, _ = next(iter(test_loader))
+        # shap_values = e.shap_values(test_x[:1])
+        #
+        # self.model.eval()
+        # self.model.zero_grad()
+        # with torch.no_grad():
+        #     diff = (self.model(test_x[:1]) - self.model(next_x[inds, :])).detach().numpy().mean(0)
+        # sums = np.array([shap_values[i].sum() for i in range(len(shap_values))])
+        # d = np.abs(sums - diff).sum()
+        # assert d / np.abs(diff).sum() < 0.001, "Sum of SHAP values does not match difference! %f" % (
+        #             d / np.abs(diff).sum())

@@ -39,6 +39,7 @@ data/cinic10/
 
 data/MNIST/train
 data/MNIST/test
+data/MNIST/MNIST
 data/shakespeare/train
 data/shakespeare/test
 data/stackoverflow/datasets
