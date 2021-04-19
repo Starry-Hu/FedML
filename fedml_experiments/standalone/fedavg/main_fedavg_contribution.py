@@ -29,6 +29,7 @@ from fedml_api.model.nlp.rnn import RNN_OriginalFedAvg, RNN_StackOverFlow
 
 from fedml_api.data_preprocessing.MNIST.data_loader import load_partition_data_mnist
 from fedml_api.data_preprocessing.MNIST_test.data_loader import load_partition_data_mnist_asign  # test mnist
+from fedml_api.data_preprocessing.cervical_cancer.data_loader import load_partition_data_cervical  # test cervical_cancer
 from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.model.cv.resnet_gn import resnet18
 
@@ -59,7 +60,7 @@ def add_args(parser):
                         help='dataset used for training')  # 默认：cifar10
 
     parser.add_argument('--data_dir', type=str, default='./../../../data/MNIST',
-                        help='data directory')
+                        help='data directory')  # 原data/MNIST
 
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
                         help='how to partition the dataset on local workers')
@@ -78,7 +79,7 @@ def add_args(parser):
 
     parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
 
-    parser.add_argument('--epochs', type=int, default=5, metavar='EP',
+    parser.add_argument('--epochs', type=int, default=2, metavar='EP',
                         help='how many epochs will be trained locally')
 
     parser.add_argument('--client_num_in_total', type=int, default=5, metavar='NN',
@@ -87,8 +88,8 @@ def add_args(parser):
     parser.add_argument('--client_num_per_round', type=int, default=3, metavar='NN',
                         help='number of workers')  # 原默认10
 
-    parser.add_argument('--comm_round', type=int, default=10,
-                        help='how many round of communications we shoud use')
+    parser.add_argument('--comm_round', type=int, default=3,
+                        help='how many round of communications we shoud use') # 原默认10
 
     parser.add_argument('--frequency_of_the_test', type=int, default=5,
                         help='the frequency of the algorithms')
@@ -136,7 +137,11 @@ def load_data(args, dataset_name):
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_mnist_asign(args.dataset, args.data_dir, args.partition_method,
                                                     args.partition_alpha, args.client_num_in_total, args.batch_size)
-
+    elif dataset_name == "cervical_cancer":
+        train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num = load_partition_data_cervical(args.dataset, args.data_dir, args.partition_method,
+                                                    args.partition_alpha, args.client_num_in_total, args.batch_size)
     elif dataset_name == "femnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
@@ -344,7 +349,6 @@ if __name__ == "__main__":
     fedavgAPI.train()
     base_metrics = fedavgAPI.predict_on_test()
 
-
     # 测试shap
     fedavgAPI.show()
 
@@ -352,7 +356,7 @@ if __name__ == "__main__":
     # 通过删除客户端再训练模型，并对测试数据进行预测
     metrics_list = [None] * args.client_num_in_total  # 存储每次预测的结果矩阵
     # for client in range(args.client_num_in_total):
-    for client in range(10):
+    for client in range(args.client_num):
         logging.info("############fedavgAPI_with_delete-{0}".format(client))
 
         model_with_delete = create_model(args, model_name=args.model, output_dim=dataset[7])
@@ -367,6 +371,7 @@ if __name__ == "__main__":
     contribution_delete_measure = delete_measure.compute_influence()
 
     logging.info(contribution_delete_measure)
+    delete_measure.drawBarFigure(contribution_delete_measure)
 
 
     # 沙普利值法：计算纵向联邦学习中每个客户端所提供特征的贡献量

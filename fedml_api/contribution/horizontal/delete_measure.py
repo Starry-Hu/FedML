@@ -1,5 +1,5 @@
 import torch
-import wandb
+import matplotlib.pyplot as plt
 
 
 class DeleteMeasure(object):
@@ -28,3 +28,10 @@ class DeleteMeasure(object):
             # 对每个batch的计算结果再求和取平均，等同于对所有实例相减取绝对值再求和取平均
             influence_list[client] = torch.sum(batch_sum) / batch_sum.size()[0]
         return influence_list
+
+    def drawBarFigure(self, influence_list):
+        fig = plt.figure()
+        ax = fig.add_axes([0, 0, 1, 1])
+        clients = range(self.client_num)
+        ax.bar(clients, influence_list)
+        plt.show()

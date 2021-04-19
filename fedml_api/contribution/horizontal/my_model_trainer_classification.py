@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import shap
+import numpy as np
 
 try:
     from fedml_core.trainer.model_trainer import ModelTrainer
@@ -39,7 +40,14 @@ class MyModelTrainer(ModelTrainer):
                 # logging.info("labels.size = " + str(labels.size()))
                 model.zero_grad()
                 log_probs = model(x)
-                loss = criterion(log_probs, labels)
+                # loss = criterion(log_probs, labels)
+                try:
+                    model.softmax
+                    criterion = nn.NLLLoss().to(device)
+                    loss = criterion(torch.log(log_probs + 1e-20), labels)
+                except AttributeError:
+                    criterion = nn.CrossEntropyLoss().to(device)
+                    loss = criterion(log_probs, labels)
                 loss.backward()
 
                 # to avoid nan loss
@@ -75,7 +83,14 @@ class MyModelTrainer(ModelTrainer):
                 target = target.long()  # fix bug：转化为long类型，否则计算损失函数出错
                 pred = model(x)
 
-                loss = criterion(pred, target)
+                # loss = criterion(pred, target)
+                try:
+                    model.softmax
+                    criterion = nn.NLLLoss().to(device)
+                    loss = criterion(torch.log(pred + 1e-20), target)
+                except AttributeError:
+                    criterion = nn.CrossEntropyLoss().to(device)
+                    loss = criterion(pred, target)
 
                 _, predicted = torch.max(pred, -1)
                 correct = predicted.eq(target).sum()
@@ -129,15 +144,14 @@ class MyModelTrainer(ModelTrainer):
         # return y_true, y_pred, y_pred_prob
 
     def show(self, test_loader):
-        import numpy as np
-        batch = next(iter(test_loader))
-        images, _ = batch
-        inds = np.random.choice(images.shape[0], 1, replace=False)
+        images, _ = next(iter(test_loader))
+        # 随机选择显示的图片
+        index = np.random.choice(images.shape[0], 1, replace=False)
 
-        background = images[0:1]
-        test_images = images[1:]
+        background = images[0:100]
+        test_images = images[100:103]
 
-        return background,test_images
+        return background, test_images
 
         # next_x, _ = next(iter(test_loader))
         # print(next_x.shape)

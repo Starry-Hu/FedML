@@ -1,0 +1,1 @@
+wget https://datahub.io/machine-learning/cervical-cancer/r/cervical-cancer.csv

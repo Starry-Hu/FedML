@@ -1,117 +1,15 @@
 import logging
-
 import numpy as np
-import torch
 import torch.utils.data as data
-import torchvision.transforms as transforms
-
-from .datasets import MNIST_truncated
-
-logging.basicConfig()
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# generate the non-IID distribution for all methods
+from .datasets import Cervical_truncated
 
 
-def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/MNIST/distribution.txt'):
-    distribution = {}
-    with open(filename, 'r') as data:
-        for x in data.readlines():
-            if '{' != x[0] and '}' != x[0]:
-                tmp = x.split(':')
-                if '{' == tmp[1].strip():
-                    first_level_key = int(tmp[0])
-                    distribution[first_level_key] = {}
-                else:
-                    second_level_key = int(tmp[0])
-                    distribution[first_level_key][second_level_key] = int(tmp[1].strip().replace(',', ''))
-    return distribution
+def load_cervical_data(datadir):
+    train_ds = Cervical_truncated(datadir, train=True)
+    test_ds = Cervical_truncated(datadir, train=False)
 
-
-def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/MNIST/net_dataidx_map.txt'):
-    net_dataidx_map = {}
-    with open(filename, 'r') as data:
-        for x in data.readlines():
-            if '{' != x[0] and '}' != x[0] and ']' != x[0]:
-                tmp = x.split(':')
-                if '[' == tmp[-1].strip():
-                    key = int(tmp[0])
-                    net_dataidx_map[key] = []
-                else:
-                    tmp_array = x.split(',')
-                    net_dataidx_map[key] = [int(i.strip()) for i in tmp_array]
-    return net_dataidx_map
-
-
-# 记录各个客户端的数据状态（数据分布，每一类的个数）
-def record_net_data_stats(y_train, net_dataidx_map):
-    net_cls_counts = {}
-
-    for net_i, dataidx in net_dataidx_map.items():
-        unq, unq_cnt = np.unique(y_train[dataidx], return_counts=True)
-        tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
-        net_cls_counts[net_i] = tmp
-    logging.debug('Data statistics: %s' % str(net_cls_counts))
-    return net_cls_counts
-
-
-class Cutout(object):
-    def __init__(self, length):
-        self.length = length
-
-    def __call__(self, img):
-        h, w = img.size(1), img.size(2)
-        mask = np.ones((h, w), np.float32)
-        y = np.random.randint(h)
-        x = np.random.randint(w)
-
-        y1 = np.clip(y - self.length // 2, 0, h)
-        y2 = np.clip(y + self.length // 2, 0, h)
-        x1 = np.clip(x - self.length // 2, 0, w)
-        x2 = np.clip(x + self.length // 2, 0, w)
-
-        mask[y1: y2, x1: x2] = 0.
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img *= mask
-        return img
-
-
-# 对MNIST数据进行转换（读取）
-def _data_transforms_mnist():
-    MNIST_MEAN = (0.1307,)
-    MNIST_STD = (0.3081,)
-
-    train_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        # transforms.RandomCrop(32, padding=4),
-        # transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(MNIST_MEAN, MNIST_STD),
-    ])
-
-    # train_transform.transforms.append(Cutout(16))
-
-    valid_transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor(),
-        transforms.Normalize(MNIST_MEAN, MNIST_STD),
-    ])
-
-    return train_transform, valid_transform
-
-
-# 从数据所在路径进行加载，并将数据截断为训练集和测试集，然后取各自集合的数据和标签进行返回
-def load_mnist_data(datadir):
-    train_transform, test_transform = _data_transforms_mnist()
-
-    # 若路径中已有文件则可以跳过下载，直接打包
-    mnist_train_ds = MNIST_truncated(datadir, train=True, download=True, transform=train_transform)
-    mnist_test_ds = MNIST_truncated(datadir, train=False, download=True, transform=test_transform)
-
-    X_train, y_train = mnist_train_ds.data, mnist_train_ds.target
-    X_test, y_test = mnist_test_ds.data, mnist_test_ds.target
+    X_train, y_train = train_ds.data, train_ds.target
+    X_test, y_test = test_ds.data, test_ds.target
 
     return (X_train, y_train, X_test, y_test)
 
@@ -119,7 +17,7 @@ def load_mnist_data(datadir):
 # 根据模式、总的客户端数量大小、划分比率划分数据集：训练集、测试集
 def partition_data(dataset, datadir, partition, n_nets, alpha):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_mnist_data(datadir)
+    X_train, y_train, X_test, y_test = load_cervical_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
 
@@ -157,18 +55,59 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
             net_dataidx_map[j] = idx_batch[j]
 
     elif partition == "hetero-fix":
-        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/mnist/net_dataidx_map.txt'
+        dataidx_map_file_path = './data_preprocessing/non-iid-distribution/cervical/net_dataidx_map.txt'
         net_dataidx_map = read_net_dataidx_map(dataidx_map_file_path)
 
     # 确定每个客户端的每一类训练数据集大小
     if partition == "hetero-fix":
-        distribution_file_path = './data_preprocessing/non-iid-distribution/mnist/distribution.txt'
+        distribution_file_path = './data_preprocessing/non-iid-distribution/cervical/distribution.txt'
         traindata_cls_counts = read_data_distribution(distribution_file_path)
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
 
     return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
 
+
+def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/cervical/distribution.txt'):
+    distribution = {}
+    with open(filename, 'r') as data:
+        for x in data.readlines():
+            if '{' != x[0] and '}' != x[0]:
+                tmp = x.split(':')
+                if '{' == tmp[1].strip():
+                    first_level_key = int(tmp[0])
+                    distribution[first_level_key] = {}
+                else:
+                    second_level_key = int(tmp[0])
+                    distribution[first_level_key][second_level_key] = int(tmp[1].strip().replace(',', ''))
+    return distribution
+
+
+def read_net_dataidx_map(filename='./data_preprocessing/non-iid-distribution/cervical/net_dataidx_map.txt'):
+    net_dataidx_map = {}
+    with open(filename, 'r') as data:
+        for x in data.readlines():
+            if '{' != x[0] and '}' != x[0] and ']' != x[0]:
+                tmp = x.split(':')
+                if '[' == tmp[-1].strip():
+                    key = int(tmp[0])
+                    net_dataidx_map[key] = []
+                else:
+                    tmp_array = x.split(',')
+                    net_dataidx_map[key] = [int(i.strip()) for i in tmp_array]
+    return net_dataidx_map
+
+
+# 记录各个客户端的数据状态（数据分布，每一类的个数）
+def record_net_data_stats(y_train, net_dataidx_map):
+    net_cls_counts = {}
+
+    for net_i, dataidx in net_dataidx_map.items():
+        unq, unq_cnt = np.unique(y_train[dataidx], return_counts=True)
+        tmp = {unq[i]: unq_cnt[i] for i in range(len(unq))}
+        net_cls_counts[net_i] = tmp
+    logging.debug('Data statistics: %s' % str(net_cls_counts))
+    return net_cls_counts
 
 # for centralized training
 def get_dataloader(dataset, datadir, train_bs, test_bs, dataidxs=None):
@@ -182,13 +121,12 @@ def get_dataloader_test(dataset, datadir, train_bs, test_bs, dataidxs_train, dat
 
 # 对mnist进行数据批处理，
 def get_dataloader_mnist(datadir, train_bs, test_bs, dataidxs=None):
-    dl_obj = MNIST_truncated
-
-    transform_train, transform_test = _data_transforms_mnist()
+    # data loader，对数据分批次装载，记录每批数据情况
+    dl_obj = Cervical_truncated
 
     # dataset：训练数据若指明某客户端则是单个本地，否则是全局；但测试数据一直获取的是全局（所有客户端都对他们测试）
-    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True, transform=transform_train, download=True)
-    test_ds = dl_obj(datadir, train=False, transform=transform_test, download=True)
+    train_ds = dl_obj(datadir, dataidxs=dataidxs, train=True)
+    test_ds = dl_obj(datadir, train=False)
 
     # data loader，对数据分批次装载，记录每批数据情况
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
@@ -198,20 +136,20 @@ def get_dataloader_mnist(datadir, train_bs, test_bs, dataidxs=None):
 
 
 def get_dataloader_test_mnist(datadir, train_bs, test_bs, dataidxs_train=None, dataidxs_test=None):
-    dl_obj = MNIST_truncated
+    # data loader，对数据分批次装载，记录每批数据情况
+    dl_obj = Cervical_truncated
 
-    transform_train, transform_test = _data_transforms_mnist()
+    # dataset：训练数据若指明某客户端则是单个本地，否则是全局；但测试数据一直获取的是全局（所有客户端都对他们测试）
+    train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True)
+    test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False)
 
-    train_ds = dl_obj(datadir, dataidxs=dataidxs_train, train=True, transform=transform_train, download=True)
-    test_ds = dl_obj(datadir, dataidxs=dataidxs_test, train=False, transform=transform_test, download=True)
-
+    # data loader，对数据分批次装载，记录每批数据情况
     train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
     test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
 
     return train_dl, test_dl
 
-
-def load_partition_data_distributed_mnist(process_id, dataset, data_dir, partition_method, partition_alpha,
+def load_partition_data_distributed_cervical(process_id, dataset, data_dir, partition_method, partition_alpha,
                                             client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
@@ -246,7 +184,7 @@ def load_partition_data_distributed_mnist(process_id, dataset, data_dir, partiti
 
 
 # 加载数据并进行划分，最后将划分后的数据装载到各个客户端上
-def load_partition_data_mnist_asign(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
+def load_partition_data_cervical(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
     X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
@@ -284,3 +222,8 @@ def load_partition_data_mnist_asign(dataset, data_dir, partition_method, partiti
         test_data_local_dict[client_idx] = test_data_local
     return train_data_num, test_data_num, train_data_global, test_data_global, \
            data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+
+
+if __name__ == '__main__':
+    # load_cervical_data("./../../../data/cervical_cancer/cervical-cancer.csv")
+    load_partition_data_cervical("./../../../data/cervical_cancer/cervical-cancer.csv", "hetero", 0.7, 10, 64)
