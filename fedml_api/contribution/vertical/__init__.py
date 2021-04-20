@@ -10,56 +10,14 @@ import shap
 
 
 class Net(nn.Module):
-    # def __init__(self):
-    #     super(Net, self).__init__()
-    #
-    #     self.conv_layers = nn.Sequential(
-    #         nn.Conv2d(1, 10, kernel_size=5),
-    #         nn.MaxPool2d(2),
-    #         nn.ReLU(),
-    #         nn.Conv2d(10, 20, kernel_size=5),
-    #         nn.Dropout(),
-    #         nn.MaxPool2d(2),
-    #         nn.ReLU(),
-    #     )
-    #     self.fc_layers = nn.Sequential(
-    #         nn.Linear(320, 50),
-    #         nn.ReLU(),
-    #         nn.Dropout(),
-    #         nn.Linear(50, 10),
-    #         nn.Softmax(dim=1)
-    #     )
-    #
-    # def forward(self, x):
-    #     x = self.conv_layers(x)
-    #     x = x.view(-1, 320)
-    #     x = self.fc_layers(x)
-    #     return x
-
-    def __init__(self):
+    def __init__(self, input_dim, output_dim):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.max_pooling1 = nn.MaxPool2d(2, stride=2)
-        self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.dropout1 = nn.Dropout()
-        self.max_pooling2 = nn.MaxPool2d(2, stride=2)
-        self.relu2 = nn.ReLU()
-
-        self.fc1 = nn.Linear(320, 50)
-        self.relu3 = nn.ReLU()
-        self.dropout2 = nn.Dropout()
-        self.fc2 = nn.Linear(50, 10)
-        self.softmax = nn.Softmax(dim=1)
+        self.linear = torch.nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
-        x = self.relu1(self.max_pooling1(self.conv1(x)))
-        x = self.relu2(self.max_pooling2(self.dropout1(self.conv2(x))))
-        x = x.view(-1, 320)
-        x = self.dropout2(self.relu3(self.fc1(x)))
-        x = self.fc2(x)
-        return self.softmax(x)
-        # return x
+        x = self.linear(x)
+        outputs = torch.sigmoid(x)
+        return outputs
 
 
 def train(model, device, train_loader, optimizer, epoch):
@@ -120,7 +78,7 @@ def test(model, device, test_loader):
 
 if __name__ == '__main__':
 
-    X_display, y_display = shap.datasets.adult(display=True)
+    # X_display, y_display = shap.datasets.adult(display=True)
 
 
     batch_size = 128
@@ -140,7 +98,7 @@ if __name__ == '__main__':
         ])),
         batch_size=batch_size, shuffle=True)
 
-    model = Net().to(device)
+    model = Net(14,2).to(device)
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
 
     for epoch in range(1, num_epochs + 1):

@@ -30,8 +30,11 @@ class DeleteMeasure(object):
         return influence_list
 
     def drawBarFigure(self, influence_list):
-        fig = plt.figure()
-        ax = fig.add_axes([0, 0, 1, 1])
-        clients = range(self.client_num)
-        ax.bar(clients, influence_list)
+        # fig = plt.figure()
+        # ax = fig.add_axes([0, 0, 1, 1])
+        # client_axis = ['client-{}'.format(x) for x in range(self.client_num)]
+        # ax.bar(client_axis, influence_list)
+        # plt.show()
+
+        plt.bar(range(len(influence_list)), influence_list)
         plt.show()

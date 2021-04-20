@@ -53,14 +53,14 @@ def add_args(parser):
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--model', type=str, default='cnn', metavar='N',
+    parser.add_argument('--model', type=str, default='lr', metavar='N',
                         help='neural network used in training')  # 默认：resnet56
 
-    parser.add_argument('--dataset', type=str, default='mnist_test', metavar='N',
-                        help='dataset used for training')  # 默认：cifar10
+    parser.add_argument('--dataset', type=str, default='cervical_cancer', metavar='N',
+                        help='dataset used for training')  # 默认：cifar10,mnist_test
 
-    parser.add_argument('--data_dir', type=str, default='./../../../data/MNIST',
-                        help='data directory')  # 原data/MNIST
+    parser.add_argument('--data_dir', type=str, default='./../../../data/cervical_cancer/risk_factors_cervical_cancer.csv',
+                        help='data directory')  # 原./../../../data/MNIST
 
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
                         help='how to partition the dataset on local workers')
@@ -74,12 +74,12 @@ def add_args(parser):
     parser.add_argument('--client_optimizer', type=str, default='adam',
                         help='SGD with momentum; adam')
 
-    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                         help='learning rate (default: 0.001)')
 
     parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
 
-    parser.add_argument('--epochs', type=int, default=2, metavar='EP',
+    parser.add_argument('--epochs', type=int, default=15, metavar='EP',
                         help='how many epochs will be trained locally')
 
     parser.add_argument('--client_num_in_total', type=int, default=5, metavar='NN',
@@ -88,7 +88,7 @@ def add_args(parser):
     parser.add_argument('--client_num_per_round', type=int, default=3, metavar='NN',
                         help='number of workers')  # 原默认10
 
-    parser.add_argument('--comm_round', type=int, default=3,
+    parser.add_argument('--comm_round', type=int, default=10,
                         help='how many round of communications we shoud use') # 原默认10
 
     parser.add_argument('--frequency_of_the_test', type=int, default=5,
@@ -114,6 +114,8 @@ def load_data(args, dataset_name):
     else:
         full_batch = False
 
+    # assign a initial
+    feature_name = None
     if dataset_name == "mnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
@@ -140,7 +142,7 @@ def load_data(args, dataset_name):
     elif dataset_name == "cervical_cancer":
         train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_cervical(args.dataset, args.data_dir, args.partition_method,
+        class_num, feature_name = load_partition_data_cervical(args.dataset, args.data_dir, args.partition_method,
                                                     args.partition_alpha, args.client_num_in_total, args.batch_size)
     elif dataset_name == "femnist":
         logging.info("load_data. dataset_name = %s" % dataset_name)
@@ -252,7 +254,7 @@ def load_data(args, dataset_name):
         args.batch_size = args_batch_size
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
-               train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num]
+               train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, feature_name]
     return dataset
 
 
@@ -268,7 +270,10 @@ def combine_batches(batches):
 def create_model(args, model_name, output_dim):
     logging.info("create_model. model_name = %s, output_dim = %s" % (model_name, output_dim))
     model = None
-    if model_name == "lr" and args.dataset == "mnist":
+    if model_name == "lr" and args.dataset == 'cervical_cancer':
+        logging.info("LogisticRegression + cervical_cancer")
+        model = LogisticRegression(15, output_dim)
+    elif model_name == "lr" and args.dataset == "mnist":
         logging.info("LogisticRegression + MNIST")
         model = LogisticRegression(28 * 28, output_dim)
     elif model_name == "cnn" and args.dataset == "mnist_test":
@@ -336,6 +341,38 @@ if __name__ == "__main__":
     # load data
     dataset = load_data(args, args.dataset)
 
+    # # 使用svm测试
+    # from sklearn import svm
+    #
+    # train_X = torch.tensor([], device=device)
+    # train_y = torch.tensor([], device=device)
+    # test_X = torch.tensor([], device=device)
+    # test_y = torch.tensor([], device=device)
+    #
+    # for batch_idx, (x, y) in enumerate(dataset[2]):
+    #     train_X = torch.cat((train_X, x), 0)
+    #     train_y = torch.cat((train_y, y), 0)
+    # for batch_idx, (x, y) in enumerate(dataset[3]):
+    #     test_X = torch.cat((test_X, x), 0)
+    #     test_y = torch.cat((test_y, y), 0)
+    #
+    # train_X = train_X.numpy()
+    # train_y = train_y.numpy()
+    # test_X = test_X.numpy()
+    # test_y = test_y.numpy()
+    # model = svm.SVC(C=2, kernel='rbf', gamma=10, decision_function_shape='ovo', probability=True)
+    # model.fit(train_X, train_y.ravel())  # ravel函数在降维时默认是行序优先
+    # train_score = model.score(train_X, train_y)
+    # print("训练集：", train_score)
+    # test_score = model.score(test_X, test_y)
+    # print("测试集：", test_score)
+    # import shap
+    # X_train_summary = shap.kmeans(train_X, 50)
+    # explainer = shap.KernelExplainer(model.predict_proba, X_train_summary, link="logit")
+    # shap_values = explainer.shap_values(test_X)
+    # shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], test_X.iloc[0, :], link="logit")
+    # shap.summary_plot(shap_values, train_X.numpy())
+
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
@@ -349,14 +386,14 @@ if __name__ == "__main__":
     fedavgAPI.train()
     base_metrics = fedavgAPI.predict_on_test()
 
-    # 测试shap
-    fedavgAPI.show()
+    # 沙普利值法：计算纵向联邦学习中每个客户端所提供特征的贡献量
+    fedavgAPI.show_mean_shap_on_all()
 
     # 删除法：计算横向联邦学习中每个客户端的贡献量
     # 通过删除客户端再训练模型，并对测试数据进行预测
     metrics_list = [None] * args.client_num_in_total  # 存储每次预测的结果矩阵
     # for client in range(args.client_num_in_total):
-    for client in range(args.client_num):
+    for client in range(args.client_num_in_total):
         logging.info("############fedavgAPI_with_delete-{0}".format(client))
 
         model_with_delete = create_model(args, model_name=args.model, output_dim=dataset[7])
@@ -370,8 +407,5 @@ if __name__ == "__main__":
     delete_measure = DeleteMeasure(args.client_num_in_total, base_metrics, metrics_list, device)
     contribution_delete_measure = delete_measure.compute_influence()
 
-    logging.info(contribution_delete_measure)
+    print(contribution_delete_measure)
     delete_measure.drawBarFigure(contribution_delete_measure)
-
-
-    # 沙普利值法：计算纵向联邦学习中每个客户端所提供特征的贡献量

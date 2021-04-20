@@ -1,5 +1,5 @@
 import logging
-
+import torch
 
 class Client:
 
@@ -47,5 +47,18 @@ class Client:
         metrics = self.model_trainer.predict(self.local_test_data, self.device)
         return metrics
 
-    def show(self):
-        return self.model_trainer.show(self.local_test_data)
+    def get_all_X(self):
+        train_X, test_X = torch.tensor([], device=self.device), torch.tensor([], device=self.device)
+        for batch_idx, (x, _) in enumerate(self.local_training_data):
+            train_X = torch.cat((train_X, x), 0)
+        for batch_idx, (x, _) in enumerate(self.local_test_data):
+            test_X = torch.cat((test_X, x), 0)
+        return train_X, test_X
+            #     # 随机选择显示的图片
+            #     index = np.random.choice(images.shape[0], 1, replace=False)
+            #
+            #     background = images[0:100]
+            #     test_images = images[100:103]
+            #
+            #     return background, test_images
+

@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 
-"""改天看一下视频，理解pytorch中RNN的使用"""
+
 class RNN_OriginalFedAvg(nn.Module):
     """Creates a RNN model using LSTM layers for Shakespeare language models (next character prediction task).
       This replicates the model structure in the paper:

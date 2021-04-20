@@ -15,12 +15,13 @@ class FedAvgAPI(object):
         self.device = device
         self.args = args
         [train_data_num, test_data_num, train_data_global, test_data_global,
-         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num] = dataset
+         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, feature_name] = dataset
         self.train_global = train_data_global
         self.test_global = test_data_global
         self.val_global = None
         self.train_data_num_in_total = train_data_num
         self.test_data_num_in_total = test_data_num
+        self.feature_name = feature_name
 
         self.client_list = []  # 每轮的参与客户端
         self.train_data_local_num_dict = train_data_local_num_dict
@@ -332,22 +333,34 @@ class FedAvgAPI(object):
 
         return test_metrics
 
-    def show(self):
-        client = self.client_list[0]
+    # 在所有数据上进行特征的shap平均值显示
+    def show_mean_shap_on_all(self):
+        train_X_all = torch.tensor([], device=self.device)
 
+        client = self.client_list[0]
         for client_idx in range(self.args.client_num_in_total):
             if self.test_data_local_dict[client_idx] is None:
                 continue
             client.update_local_dataset(0, self.train_data_local_dict[client_idx],
                                         self.test_data_local_dict[client_idx],
                                         self.train_data_local_num_dict[client_idx])
+            train_X, test_X = client.get_all_X()
+            # train_X, test_X = client.show()  # 都是tensor(1,784)
 
-            background, test_images = client.show()  # 都是tensor(1,784)
+            train_X = torch.cat((train_X, test_X), 0)
+            e = shap.DeepExplainer(self.model_trainer.model, train_X)
+            shap_values = e.shap_values(train_X_all)
 
-            e = shap.DeepExplainer(self.model_trainer.model, background)
-            shap_values = e.shap_values(test_images)
-            shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
-            test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
-            # plot the feature attributions
-            shap.image_plot(shap_numpy, -test_numpy)
+            import pandas as pd
+            # px = pd.DataFrame(test_X.numpy())
+            shap.summary_plot(shap_values, train_X, feature_names=self.feature_name, plot_type="bar")
+            shap.summary_plot(shap_values, train_X.numpy(), feature_names=self.feature_name)
+            shap.bar_plot(shap_values, train_X.numpy(), feature_names=self.feature_name)
+            shap.force_plot(e.expected_value[0], shap_values[0][0], train_X[0])
+
             break
+
+        #
+        # shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
+        # test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
+        # shap.image_plot(shap_numpy, -test_numpy)

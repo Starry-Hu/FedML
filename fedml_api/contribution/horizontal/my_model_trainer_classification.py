@@ -85,7 +85,7 @@ class MyModelTrainer(ModelTrainer):
 
                 # loss = criterion(pred, target)
                 try:
-                    model.softmax
+                    test_softmax = model.softmax
                     criterion = nn.NLLLoss().to(device)
                     loss = criterion(torch.log(pred + 1e-20), target)
                 except AttributeError:
@@ -143,15 +143,15 @@ class MyModelTrainer(ModelTrainer):
         # y_pred_prob = F.softmax(all_outputs, dim=1)
         # return y_true, y_pred, y_pred_prob
 
-    def show(self, test_loader):
-        images, _ = next(iter(test_loader))
-        # 随机选择显示的图片
-        index = np.random.choice(images.shape[0], 1, replace=False)
-
-        background = images[0:100]
-        test_images = images[100:103]
-
-        return background, test_images
+    # def show(self, test_loader):
+    #     images, _ = next(iter(test_loader))
+    #     # 随机选择显示的图片
+    #     index = np.random.choice(images.shape[0], 1, replace=False)
+    #
+    #     background = images[0:100]
+    #     test_images = images[100:103]
+    #
+    #     return background, test_images
 
         # next_x, _ = next(iter(test_loader))
         # print(next_x.shape)

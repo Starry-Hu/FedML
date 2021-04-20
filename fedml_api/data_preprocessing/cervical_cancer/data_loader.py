@@ -10,14 +10,15 @@ def load_cervical_data(datadir):
 
     X_train, y_train = train_ds.data, train_ds.target
     X_test, y_test = test_ds.data, test_ds.target
+    feature_name = train_ds.feature_name
 
-    return (X_train, y_train, X_test, y_test)
+    return (X_train, y_train, X_test, y_test, feature_name)
 
 
 # 根据模式、总的客户端数量大小、划分比率划分数据集：训练集、测试集
 def partition_data(dataset, datadir, partition, n_nets, alpha):
     logging.info("*********partition data***************")
-    X_train, y_train, X_test, y_test = load_cervical_data(datadir)
+    X_train, y_train, X_test, y_test, feature_name = load_cervical_data(datadir)
     n_train = X_train.shape[0]
     # n_test = X_test.shape[0]
 
@@ -65,7 +66,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
     else:
         traindata_cls_counts = record_net_data_stats(y_train, net_dataidx_map)
 
-    return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts
+    return X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, feature_name
 
 
 def read_data_distribution(filename='./data_preprocessing/non-iid-distribution/cervical/distribution.txt'):
@@ -129,8 +130,8 @@ def get_dataloader_mnist(datadir, train_bs, test_bs, dataidxs=None):
     test_ds = dl_obj(datadir, train=False)
 
     # data loader，对数据分批次装载，记录每批数据情况
-    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True, drop_last=True)
-    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False, drop_last=True)
+    train_dl = data.DataLoader(dataset=train_ds, batch_size=train_bs, shuffle=True)
+    test_dl = data.DataLoader(dataset=test_ds, batch_size=test_bs, shuffle=False)
 
     return train_dl, test_dl
 
@@ -151,7 +152,7 @@ def get_dataloader_test_mnist(datadir, train_bs, test_bs, dataidxs_train=None, d
 
 def load_partition_data_distributed_cervical(process_id, dataset, data_dir, partition_method, partition_alpha,
                                             client_number, batch_size):
-    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
+    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, feature_name = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
                                                                                              client_number,
@@ -180,12 +181,13 @@ def load_partition_data_distributed_cervical(process_id, dataset, data_dir, part
             process_id, len(train_data_local), len(test_data_local)))
         train_data_global = None
         test_data_global = None
-    return train_data_num, train_data_global, test_data_global, local_data_num, train_data_local, test_data_local, class_num
+    return train_data_num, train_data_global, test_data_global, local_data_num, \
+           train_data_local, test_data_local, class_num, feature_name
 
 
 # 加载数据并进行划分，最后将划分后的数据装载到各个客户端上
 def load_partition_data_cervical(dataset, data_dir, partition_method, partition_alpha, client_number, batch_size):
-    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts = partition_data(dataset,
+    X_train, y_train, X_test, y_test, net_dataidx_map, traindata_cls_counts, feature_name = partition_data(dataset,
                                                                                              data_dir,
                                                                                              partition_method,
                                                                                              client_number,
@@ -221,9 +223,9 @@ def load_partition_data_cervical(dataset, data_dir, partition_method, partition_
         train_data_local_dict[client_idx] = train_data_local
         test_data_local_dict[client_idx] = test_data_local
     return train_data_num, test_data_num, train_data_global, test_data_global, \
-           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num
+           data_local_num_dict, train_data_local_dict, test_data_local_dict, class_num, feature_name
 
 
 if __name__ == '__main__':
-    # load_cervical_data("./../../../data/cervical_cancer/cervical-cancer.csv")
-    load_partition_data_cervical("./../../../data/cervical_cancer/cervical-cancer.csv", "hetero", 0.7, 10, 64)
+    # load_cervical_data("./../../../data/cervical_cancer/risk_factors_cervical_cancer.csv")
+    load_partition_data_cervical("./../../../data/cervical_cancer/risk_factors_cervical_cancer.csv", "hetero", 0.7, 10, 64)
