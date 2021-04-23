@@ -349,14 +349,15 @@ class FedAvgAPI(object):
 
             train_X = torch.cat((train_X, test_X), 0)
             e = shap.DeepExplainer(self.model_trainer.model, train_X)
-            shap_values = e.shap_values(train_X_all)
+            shap_values = e.shap_values(train_X)
 
             import pandas as pd
             # px = pd.DataFrame(test_X.numpy())
-            shap.summary_plot(shap_values, train_X, feature_names=self.feature_name, plot_type="bar")
-            shap.summary_plot(shap_values, train_X.numpy(), feature_names=self.feature_name)
-            shap.bar_plot(shap_values, train_X.numpy(), feature_names=self.feature_name)
-            shap.force_plot(e.expected_value[0], shap_values[0][0], train_X[0])
+            # 条状图，各特征shapely的均值；蜂巢图，shapely值分别
+            shap.summary_plot(shap_values[1], train_X, feature_names=self.feature_name[:-1], plot_type="bar")
+            shap.summary_plot(shap_values[1], train_X, feature_names=self.feature_name[:-1], plot_type="dot")
+            shap.force_plot(e.expected_value[0], shap_values[0][0], train_X[0],
+                            feature_names=self.feature_name[:-1], matplotlib=True)
 
             break
 

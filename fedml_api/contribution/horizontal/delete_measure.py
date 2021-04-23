@@ -32,9 +32,13 @@ class DeleteMeasure(object):
     def drawBarFigure(self, influence_list):
         # fig = plt.figure()
         # ax = fig.add_axes([0, 0, 1, 1])
-        # client_axis = ['client-{}'.format(x) for x in range(self.client_num)]
         # ax.bar(client_axis, influence_list)
         # plt.show()
 
-        plt.bar(range(len(influence_list)), influence_list)
+        client_axis = ['client-{}'.format(x) for x in range(self.client_num)]
+        plt.bar(range(len(influence_list)), influence_list, width=0.8)
+        plt.xticks(range(self.client_num), client_axis)
+        plt.xlabel("Group(Clients) ID")
+        plt.ylabel("Influence Instance Groups(Clients)")
+        # plt.savefig("./bar1.png")
         plt.show()
