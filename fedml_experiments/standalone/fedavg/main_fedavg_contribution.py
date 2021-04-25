@@ -341,38 +341,6 @@ if __name__ == "__main__":
     # load data
     dataset = load_data(args, args.dataset)
 
-    # # 使用svm测试
-    # from sklearn import svm
-    #
-    # train_X = torch.tensor([], device=device)
-    # train_y = torch.tensor([], device=device)
-    # test_X = torch.tensor([], device=device)
-    # test_y = torch.tensor([], device=device)
-    #
-    # for batch_idx, (x, y) in enumerate(dataset[2]):
-    #     train_X = torch.cat((train_X, x), 0)
-    #     train_y = torch.cat((train_y, y), 0)
-    # for batch_idx, (x, y) in enumerate(dataset[3]):
-    #     test_X = torch.cat((test_X, x), 0)
-    #     test_y = torch.cat((test_y, y), 0)
-    #
-    # train_X = train_X.numpy()
-    # train_y = train_y.numpy()
-    # test_X = test_X.numpy()
-    # test_y = test_y.numpy()
-    # model = svm.SVC(C=2, kernel='rbf', gamma=10, decision_function_shape='ovo', probability=True)
-    # model.fit(train_X, train_y.ravel())  # ravel函数在降维时默认是行序优先
-    # train_score = model.score(train_X, train_y)
-    # print("训练集：", train_score)
-    # test_score = model.score(test_X, test_y)
-    # print("测试集：", test_score)
-    # import shap
-    # X_train_summary = shap.kmeans(train_X, 50)
-    # explainer = shap.KernelExplainer(model.predict_proba, X_train_summary, link="logit")
-    # shap_values = explainer.shap_values(test_X)
-    # shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], test_X.iloc[0, :], link="logit")
-    # shap.summary_plot(shap_values, train_X.numpy())
-
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     # In this case, please use our FedML distributed version (./fedml_experiments/distributed_fedavg)
@@ -387,12 +355,13 @@ if __name__ == "__main__":
     base_metrics = fedavgAPI.predict_on_test()
 
     # 沙普利值法：计算纵向联邦学习中每个客户端所提供特征的贡献量
-    fedavgAPI.show_mean_shap_on_all()
+    # fedavgAPI.show_mean_shap_on_all()
+    # fedavgAPI.test_federated_shap()
+    fedavgAPI.test()
 
     # 删除法：计算横向联邦学习中每个客户端的贡献量
     # 通过删除客户端再训练模型，并对测试数据进行预测
     metrics_list = [None] * args.client_num_in_total  # 存储每次预测的结果矩阵
-    # for client in range(args.client_num_in_total):
     for client in range(args.client_num_in_total):
         logging.info("############fedavgAPI_with_delete-{0}".format(client))
 

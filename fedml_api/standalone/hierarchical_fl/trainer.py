@@ -3,10 +3,10 @@ import numpy as np
 
 from fedml_api.standalone.hierarchical_fl.group import Group
 from fedml_api.standalone.hierarchical_fl.client import Client
-from fedml_api.standalone.fedavg.fedavg_trainer import FedAvgTrainer
+from fedml_api.standalone.fedavg.my_model_trainer import MyModelTrainer  # fix bug
 
-class Trainer(FedAvgTrainer):
-
+class Trainer(MyModelTrainer):
+    # 创建集群并划分客户端
     def setup_clients(self, train_data_local_num_dict, train_data_local_dict, test_data_local_dict):
         logging.info("############setup_clients (START)#############")
         if self.args.group_method == 'random':

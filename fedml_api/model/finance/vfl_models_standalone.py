@@ -6,7 +6,7 @@ import torch.optim as optim
 class DenseModel(nn.Module):
     def __init__(self, input_dim, output_dim, learning_rate=0.01, bias=True):
         super(DenseModel, self).__init__()
-        self.classifier = nn.Sequential(  # 快速构建神经网络
+        self.classifier = nn.Sequential(
             nn.Linear(in_features=input_dim, out_features=output_dim, bias=bias),
         )
         self.is_debug = False
@@ -40,7 +40,7 @@ class DenseModel(nn.Module):
 class LocalModel(nn.Module):
     def __init__(self, input_dim, output_dim, learning_rate):
         super(LocalModel, self).__init__()
-        self.classifier = nn.Sequential(  # 相比DenseModel，加上了ReLU进行了修正
+        self.classifier = nn.Sequential(
             nn.Linear(in_features=input_dim, out_features=output_dim),
             nn.LeakyReLU()
         )

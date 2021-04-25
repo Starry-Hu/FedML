@@ -40,6 +40,7 @@ def partition_data(dataset, datadir, partition, n_nets, alpha):
             idx_batch = [[] for _ in range(n_nets)]  # 保存每个客户端的对应的数据编号集合
             # for each class in the dataset. 遍历每个类，获取他们的数据并分配到各个客户端
             for k in range(K):
+                # partition_class_samples_with_dirichlet_distribution -- noniid partition
                 idx_k = np.where(y_train == k)[0] # 属于第k类的id集合
                 np.random.shuffle(idx_k)  # 随机打乱
                 proportions = np.random.dirichlet(np.repeat(alpha, n_nets))  # 根据划分比例，按照狄利克雷函数分布来给每个客户端分配第k类数据

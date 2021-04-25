@@ -323,19 +323,13 @@ class FedAvgAPI(object):
             if self.args.ci == 1:
                 break
 
-
-        # test on test dataset
-
-        # stats = {'test_acc': test_acc, 'test_loss': test_loss}
-        # wandb.log({"Test/Acc": test_acc, "round": round_idx})
-        # wandb.log({"Test/Loss": test_loss, "round": round_idx})
-        # logging.info(stats)
-
         return test_metrics
 
     # 在所有数据上进行特征的shap平均值显示
     def show_mean_shap_on_all(self):
-        train_X_all = torch.tensor([], device=self.device)
+        logging.info("################load data for shap")
+
+        train_X_all, test_X_all = torch.tensor([], device=self.device), torch.tensor([], device=self.device)
 
         client = self.client_list[0]
         for client_idx in range(self.args.client_num_in_total):
@@ -344,24 +338,209 @@ class FedAvgAPI(object):
             client.update_local_dataset(0, self.train_data_local_dict[client_idx],
                                         self.test_data_local_dict[client_idx],
                                         self.train_data_local_num_dict[client_idx])
-            train_X, test_X = client.get_all_X()
+            train_X, train_y, test_X = client.get_all_X()
             # train_X, test_X = client.show()  # 都是tensor(1,784)
+            train_X_all = torch.cat((train_X_all, train_X), 0)
+            test_X_all = torch.cat((test_X_all, test_X), 0)
 
-            train_X = torch.cat((train_X, test_X), 0)
             e = shap.DeepExplainer(self.model_trainer.model, train_X)
-            shap_values = e.shap_values(train_X)
-
+            shap_values = e.shap_values(test_X)
+            # show sort
             import pandas as pd
-            # px = pd.DataFrame(test_X.numpy())
+            df = pd.DataFrame({
+                "mean_abs_shap": np.mean(np.abs(shap_values[1]), axis=0),
+                "stdev_abs_shap": np.std(np.abs(shap_values[1]), axis=0),
+                "name": np.array(self.feature_name[:-1])
+            })
+            df = df.sort_values("mean_abs_shap", ascending=False)
+
             # 条状图，各特征shapely的均值；蜂巢图，shapely值分别
-            shap.summary_plot(shap_values[1], train_X, feature_names=self.feature_name[:-1], plot_type="bar")
-            shap.summary_plot(shap_values[1], train_X, feature_names=self.feature_name[:-1], plot_type="dot")
-            shap.force_plot(e.expected_value[0], shap_values[0][0], train_X[0],
-                            feature_names=self.feature_name[:-1], matplotlib=True)
+            shap.summary_plot(shap_values[1], test_X, feature_names=self.feature_name[:-1], plot_type="bar",
+                              max_display=15, sort=False)
+            # 对单个例子的shap值进行说明
+            shap.plots.bar(shap_values)
 
-            break
+            shap.bar_plot(shap_values[0][0], feature_names=self.feature_name[:-1])
+            # shap.bar_plot(shap_values[1][0], feature_names=self.feature_name[:-1])
 
-        #
+            clustering = shap.utils.hclust(train_X, train_y)  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
+            shap.plots.bar(shap_values, clustering=clustering, cluster_threshold=0.9)
+
+        # shap.summary_plot(shap_values[1], test_X_all, feature_names=self.feature_name[:-1], plot_type="dot")
+        # shap.force_plot(e.expected_value[0], shap_values[0][0], test_X_all[0],
+        #                 feature_names=self.feature_name[:-1], matplotlib=True)
+
+        # mnist绘图
         # shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
         # test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
         # shap.image_plot(shap_numpy, -test_numpy)
+
+    def test(self):
+        client = self.client_list[0]
+        for client_idx in range(self.args.client_num_in_total):
+            if self.test_data_local_dict[client_idx] is None:
+                continue
+            client.update_local_dataset(0, self.train_data_local_dict[client_idx],
+                                        self.test_data_local_dict[client_idx],
+                                        self.train_data_local_num_dict[client_idx])
+            train_X, train_y, test_X = client.get_all_X()
+
+            e = shap.DeepExplainer(self.model_trainer.model, train_X)
+            # shap_values = e.shap_values(test_X)
+
+            # Explain the model
+            # f_knn = lambda x: knn_norm.predict_proba(x)[:, 1]
+            import pandas as pd
+            X_train_norm = pd.DataFrame(train_X.numpy())
+            f_knn = lambda x: self.model_trainer.model.forward(x)
+            med = X_train_norm.median().values.reshape((1, X_train_norm.shape[1]))
+            x = np.array(X_train_norm.iloc[0])
+            # x = np.array(X_train_norm.loc[2583])
+            M = 15  # adult 12
+            from ..vertical.federate_shap import FederateShap
+            fs = FederateShap()
+
+            # shap
+            phi = fs.kernel_shap(f_knn, x, med, M)
+            base_value = phi[-1]
+            shap_values = phi[:-1]
+            t1 = np.array([shap_values]).squeeze().transpose()
+            shap_values_df = pd.DataFrame(data=t1, columns=self.feature_name[:-1])
+            print("Shap Values")
+            # shap_values_df
+            import matplotlib.pyplot as plt
+            row = shap_values_df.iloc[0]
+            row.plot(kind='bar', color='k')
+            plt.show()
+
+            # federated shap
+            fed_pos = 9
+            print(x)
+            phi = fs.kernel_shap_federated(f_knn, x, med, M, fed_pos)
+            base_value = phi[-1]
+            shap_values = phi[:-1]
+            new_columns = list(X_train_norm)[:fed_pos]
+            new_columns.extend(['Federated'])
+            shap_values_df = pd.DataFrame(data=np.array([shap_values]), columns=new_columns)
+            print("Federated Shap Values")
+            # shap_values_df.plot()
+            row = shap_values_df.iloc[0]
+            row.plot(kind='bar', color='b')
+            plt.show()
+
+            # Aggregated and average shap
+            shap_values_whole = []
+            counttt = 0
+            for index, row in X_train_norm.iterrows():
+                counttt += 1
+                if counttt > 20:  # 1000
+                    break
+                x = row
+                phi = fs.kernel_shap(f_knn, x, med, M)
+                base_value = phi[-1]
+                shap_values = phi[:-1]
+                shap_values_whole.append(list(shap_values))
+            shap_values_whole = np.array(shap_values_whole)
+            print(shap_values_whole)
+
+            # Aggregated and average federated shap
+            shap_values_whole = []
+            cols_federated_9 = ['Age', 'Country', 'Education-Num', 'Marital Status', 'Relationship', 'Race', 'Sex',
+                                'Capital Gain', 'Capital Loss', 'Federated']
+            cols_federated_7 = ['Age', 'Country', 'Education-Num', 'Marital Status', 'Relationship', 'Race', 'Sex',
+                                'Federated']
+            counttt = 0
+            M = 12
+            fed_pos = 7
+            for index, row in X_train_norm.iterrows():
+                counttt += 1
+                if counttt > 20:  # 1000
+                    break
+                x = np.array(row)
+                # print(x)
+                # print(M)
+                # print(fed_pos)
+                phi = fs.kernel_shap_federated(f_knn, x, med, M, fed_pos)
+                base_value = phi[-1]
+                shap_values = phi[:-1]
+                shap_values_whole.append(list(shap_values))
+            shap_values_whole = np.array(shap_values_whole)
+            # print(shap_values_whole)
+
+            shap.summary_plot(shap_values_whole, feature_names=cols_federated_7, sort=False, color='r')
+            shap.summary_plot(shap_values_whole, feature_names=cols_federated_7, sort=False, plot_type="bar", color='r')
+
+            ########### test end
+
+
+    def test_federated_shap(self):
+        ####### test shap federated
+        import shap
+        shap.initjs()
+
+        import ssl
+        ssl._create_default_https_context = ssl._create_unverified_context
+
+        # load data
+        X, y = shap.datasets.adult()
+        cols = ['Age', 'Country', 'Education-Num', 'Marital Status', 'Relationship', 'Race', 'Sex', 'Capital Gain',
+                'Capital Loss', 'Workclass', 'Occupation', 'Hours per week']
+        X = X[cols]
+        # X_display, y_display = shap.datasets.adult(display=True)
+        import sklearn
+        X_train, X_valid, y_train, y_valid = sklearn.model_selection.train_test_split(X, y, test_size=0.2,
+                                                                                      random_state=7)
+        # normalize data
+        dtypes = list(zip(X.dtypes.index, map(str, X.dtypes)))
+        X_train_norm = X_train.copy()
+        X_valid_norm = X_valid.copy()
+        for k, dtype in dtypes:
+            m = X_train[k].mean()
+            s = X_train[k].std()
+            X_train_norm[k] -= m
+            X_train_norm[k] /= s
+
+            X_valid_norm[k] -= m
+            X_valid_norm[k] /= s
+        # train model
+        knn_norm = sklearn.neighbors.KNeighborsClassifier()
+        knn_norm.fit(X_train_norm, y_train)
+        # test score
+        knn_norm.score(X_valid, y_valid)
+
+        # Explain the model
+        f_knn = lambda x: knn_norm.predict_proba(x)[:, 1]
+        med = X_train_norm.median().values.reshape((1, X_train_norm.shape[1]))
+        x = np.array(X_train_norm.iloc[0])
+        # x = np.array(X_train_norm.loc[2583])
+        M = 12
+        from ..vertical.federate_shap import FederateShap
+        fs = FederateShap()
+
+        # shap
+        phi = fs.kernel_shap(f_knn, x, med, M)
+        base_value = phi[-1]
+        shap_values = phi[:-1]
+        import pandas as pd
+        shap_values_df = pd.DataFrame(data=np.array([shap_values]), columns=list(X_train_norm))
+        print("Shap Values")
+        # shap_values_df
+        import matplotlib.pyplot as plt
+        row = shap_values_df.iloc[0]
+        row.plot(kind='bar', color='k')
+        plt.show()
+
+        # federated shap
+        fed_pos = 9
+        print(x)
+        phi = fs.kernel_shap_federated(f_knn, x, med, M, fed_pos)
+        base_value = phi[-1]
+        shap_values = phi[:-1]
+        new_columns = list(X_train_norm)[:fed_pos]
+        new_columns.extend(['Federated'])
+        shap_values_df = pd.DataFrame(data=np.array([shap_values]), columns=new_columns)
+        print("Federated Shap Values")
+        # shap_values_df.plot()
+        row = shap_values_df.iloc[0]
+        row.plot(kind='bar', color='b')
+        plt.show()

@@ -1,9 +1,9 @@
 import logging
 
 from fedml_api.standalone.hierarchical_fl.client import Client
-from fedml_api.standalone.fedavg.fedavg_trainer import FedAvgTrainer
+from fedml_api.standalone.fedavg.fedavg_api import FedAvgAPI  # fix bug
 
-class Group(FedAvgTrainer):
+class Group(FedAvgAPI):
 
     def __init__(self, idx, total_client_indexes, train_data_local_dict, test_data_local_dict, train_data_local_num_dict, args, device, model):
         self.idx = idx
@@ -15,6 +15,7 @@ class Group(FedAvgTrainer):
             self.client_dict[client_idx] = Client(client_idx, train_data_local_dict[client_idx], test_data_local_dict[client_idx],
                        train_data_local_num_dict[client_idx], args, device, model)
 
+    # 获取总的采样样本数量
     def get_sample_number(self, sampled_client_indexes):
         self.group_sample_number = 0
         for client_idx in sampled_client_indexes:

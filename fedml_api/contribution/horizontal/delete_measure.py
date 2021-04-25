@@ -1,5 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
+import logging
+import wandb
 
 
 class DeleteMeasure(object):
@@ -27,14 +29,14 @@ class DeleteMeasure(object):
                 batch_sum = torch.cat((batch_sum, torch.tensor([batch_one])), 0)
             # 对每个batch的计算结果再求和取平均，等同于对所有实例相减取绝对值再求和取平均
             influence_list[client] = torch.sum(batch_sum) / batch_sum.size()[0]
+
+            # predict on test dataset
+            stats = {'client_idx': client, "influence": influence_list[client]}
+            wandb.log({"influence": influence_list[client], 'client_idx': client})
+            logging.info(stats)
         return influence_list
 
     def drawBarFigure(self, influence_list):
-        # fig = plt.figure()
-        # ax = fig.add_axes([0, 0, 1, 1])
-        # ax.bar(client_axis, influence_list)
-        # plt.show()
-
         client_axis = ['client-{}'.format(x) for x in range(self.client_num)]
         plt.bar(range(len(influence_list)), influence_list, width=0.8)
         plt.xticks(range(self.client_num), client_axis)
