@@ -30,8 +30,14 @@ class Client:
     # 使用给定模型训练器为全局参数w在本地设备上通过本地训练数据进行训练
     def train(self, w_global):
         self.model_trainer.set_model_params(w_global)
-        self.model_trainer.train(self.local_training_data, self.device, self.args)
+        epoch_loss = self.model_trainer.train(self.local_training_data, self.device, self.args)
         weights = self.model_trainer.get_model_params()
+
+        import wandb
+        stats = {"Loss": sum(epoch_loss) / len(epoch_loss), "Client Index": self.client_idx}
+        wandb.log({"Loss": sum(epoch_loss) / len(epoch_loss), "Client Index": self.client_idx})
+        logging.info(stats)
+
         return weights
 
     # 在本设备上进行本地测试（评估），使用测试集或训练集

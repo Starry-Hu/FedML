@@ -1,6 +1,7 @@
 import scipy.special
 import numpy as np
 import itertools
+import torch
 
 #federated_shap methods
 class FederateShap():
@@ -14,8 +15,11 @@ class FederateShap():
     def _shapley_kernel(self, M ,s):
         if s == 0 or s == M:
             return 10000
-        return (M-1)/(scipy.special.binom(M,s)*s*(M-s))
+        # determine how many subsets (and their complements) are of the current size
+        return (M-1)/(scipy.special.binom(M,s)*s*(M-s))  # binom=C(m,s)
 
+    def test_shape(self, X, model, ranked_outputs=None, output_rank_order="max", device='cpu'):
+        X = [x.detach().to(device) for x in X]
 
 
         #Original shap function
@@ -41,26 +45,21 @@ class FederateShap():
         for i in range(2**M):
             V[i,:] = reference
 
-        ws = {}
+        ws = {}  # calculate all feature's shapley value in all permutatuions(2^m)
         for i,s in enumerate(self._powerset(range(M))):
             s = list(s)
             #print(s)
             V[i,s] = x[s]
             X[i,s] = 1
             ws[len(s)] = ws.get(len(s), 0) + self._shapley_kernel(M,len(s))
-            weights[i] = self._shapley_kernel(M,len(s))
+            weights[i] = self._shapley_kernel(M,len(s))  # 该排列组合占的shapley比重
         # to tensor
-        import torch
         V = torch.from_numpy(V).float()
         y = f(V)
         if torch.is_tensor(y):
             y = y.detach().numpy()
 
         tmp = np.linalg.inv(np.dot(np.dot(X.T, np.diag(weights)), X))
-        t1 = np.dot(X.T, np.diag(weights))
-        t2 = np.dot(t1, y)
-        t3 = np.dot(tmp, t2)
-        return t3
         return np.dot(tmp, np.dot(np.dot(X.T, np.diag(weights)), y))
 
     #Federated Shap Function
@@ -108,11 +107,55 @@ class FederateShap():
             X[i,s] = 1
             ws[len(s)] = ws.get(len(s), 0) + self._shapley_kernel(M_cur,len(s))
             weights[i] = self._shapley_kernel(M_cur,len(s))
+
+        # to tensor
+        V = torch.from_numpy(V).float()
         y = f(V)
+        if torch.is_tensor(y):
+            y = y.detach().numpy()
         tmp = np.linalg.inv(np.dot(np.dot(X.T, np.diag(weights)), X))
         return np.dot(tmp, np.dot(np.dot(X.T, np.diag(weights)), y))
 
+    def kernel_shap_federated_with_step(self, f, x, reference, M, fed_pos, step):
+        M_real = M
+        # M_cur = fed_pos + 1 #with one extra feature as the aggregated hidden features
+        M_cur = M+1-step
 
+        X = np.zeros((2**M_cur,M_cur+1))
+        X[:,-1] = 1
+
+        weights = np.zeros(2**M_cur)
+        V = np.zeros((2**M_cur,M_real))
+        for i in range(2**M_cur):
+            V[i,:] = reference
+
+        ws = {}
+
+        hidden_index = range(fed_pos, fed_pos+step)
+
+        for i,s in enumerate(self._powerset(range(M_cur))):
+            #s is the different combinations of features
+            s = list(s)
+            #print(x)
+            #print(s)
+            V[i,s] = x[s]
+            #if s contains the last combined feature, those hidden features will be set to real values instead of reference
+
+            if fed_pos in s or fed_pos+1 in s or fed_pos+2 in s:
+                # print(x)
+                # print(hidden_index)
+                V[i,hidden_index] = x[hidden_index]
+            X[i,s] = 1
+            ws[len(s)] = ws.get(len(s), 0) + self._shapley_kernel(M_cur,len(s))
+            weights[i] = self._shapley_kernel(M_cur,len(s))
+
+        # to tensor
+        V = torch.from_numpy(V).float()
+        y = f(V)
+        if torch.is_tensor(y):
+            y = y.detach().numpy()
+        tmp = np.linalg.inv(np.dot(np.dot(X.T, np.diag(weights)), X))
+        return np.dot(tmp, np.dot(np.dot(X.T, np.diag(weights)), y))
 
 ###########Dummy Testing#########################
 #Function that imitates the model, takes in instance features and outputs predictons
@@ -122,38 +165,38 @@ def f(X):
     return np.dot(X,beta) + 10
 
 #Original Shap
-print("Original Shap Dummy Testing:")
-M = 10
-np.random.seed(1)
-x = np.random.randn(M)
-reference = np.zeros(M)
-fs = FederateShap()
-phi = fs.kernel_shap(f, x, reference, M)
-base_value = phi[-1]
-shap_values = phi[:-1]
-
-print("  reference =", reference)
-print("          x =", x)
-print("shap_values =", shap_values)
-print(" base_value =", base_value)
-print("   sum(phi) =", np.sum(phi))
-print("       f(x) =", f(x))
+# print("Original Shap Dummy Testing:")
+# M = 10
+# np.random.seed(1)
+# x = np.random.randn(M)
+# reference = np.zeros(M)
+# fs = FederateShap()
+# phi = fs.kernel_shap(f, x, reference, M)
+# base_value = phi[-1]
+# shap_values = phi[:-1]
+#
+# print("  reference =", reference)
+# print("          x =", x)
+# print("shap_values =", shap_values)
+# print(" base_value =", base_value)
+# print("   sum(phi) =", np.sum(phi))
+# print("       f(x) =", f(x))
 
 #Federated Shap
-print("Federated Shap Dummy Testing:")
-M = 10
-np.random.seed(1)
-x = np.random.randn(M)
-reference = np.zeros(M)
-fed_pos = 6
-fs = FederateShap()
-phi = fs.kernel_shap_federated(f, x, reference, M, fed_pos)
-base_value = phi[-1]
-shap_values = phi[:-1]
-
-print("  reference =", reference)
-print("          x =", x)
-print("shap_values =", shap_values)
-print(" base_value =", base_value)
-print("   sum(phi) =", np.sum(phi))
-print("       f(x) =", f(x))
+# print("Federated Shap Dummy Testing:")
+# M = 10
+# np.random.seed(1)
+# x = np.random.randn(M)
+# reference = np.zeros(M)
+# fed_pos = 6
+# fs = FederateShap()
+# phi = fs.kernel_shap_federated(f, x, reference, M, fed_pos)
+# base_value = phi[-1]
+# shap_values = phi[:-1]
+#
+# print("  reference =", reference)
+# print("          x =", x)
+# print("shap_values =", shap_values)
+# print(" base_value =", base_value)
+# print("   sum(phi) =", np.sum(phi))
+# print("       f(x) =", f(x))

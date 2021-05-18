@@ -59,6 +59,7 @@ class MyModelTrainer(ModelTrainer):
                 #            100. * (batch_idx + 1) / len(self.local_training_data), loss.item()))
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss) / len(batch_loss))
+            return epoch_loss
             # logging.info('Client Index = {}\tEpoch: {}\tLoss: {:.6f}'.format(
             #     self.client_idx, epoch, sum(epoch_loss) / len(epoch_loss)))
 

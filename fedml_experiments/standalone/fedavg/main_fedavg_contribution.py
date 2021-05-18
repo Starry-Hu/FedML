@@ -65,7 +65,7 @@ def add_args(parser):
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
                         help='how to partition the dataset on local workers')
 
-    parser.add_argument('--partition_alpha', type=float, default=0.7, metavar='PA',
+    parser.add_argument('--partition_alpha', type=float, default=0.5, metavar='PA',
                         help='partition alpha (default: 0.5)')
 
     parser.add_argument('--batch_size', type=int, default=128, metavar='N',
@@ -74,13 +74,13 @@ def add_args(parser):
     parser.add_argument('--client_optimizer', type=str, default='adam',
                         help='SGD with momentum; adam')
 
-    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.001)')
 
     parser.add_argument('--wd', help='weight decay parameter;', type=float, default=0.001)
 
     parser.add_argument('--epochs', type=int, default=15, metavar='EP',
-                        help='how many epochs will be trained locally')
+                        help='how many epochs will be trained locally')  # 默认15
 
     parser.add_argument('--client_num_in_total', type=int, default=5, metavar='NN',
                         help='number of workers in a distributed cluster')  # 原默认10
@@ -88,7 +88,7 @@ def add_args(parser):
     parser.add_argument('--client_num_per_round', type=int, default=3, metavar='NN',
                         help='number of workers')  # 原默认10
 
-    parser.add_argument('--comm_round', type=int, default=10,
+    parser.add_argument('--comm_round', type=int, default=15,
                         help='how many round of communications we shoud use') # 原默认10
 
     parser.add_argument('--frequency_of_the_test', type=int, default=5,
@@ -272,7 +272,7 @@ def create_model(args, model_name, output_dim):
     model = None
     if model_name == "lr" and args.dataset == 'cervical_cancer':
         logging.info("LogisticRegression + cervical_cancer")
-        model = LogisticRegression(15, output_dim)
+        model = LogisticRegression(15, output_dim)  # 15\23\35
     elif model_name == "lr" and args.dataset == "mnist":
         logging.info("LogisticRegression + MNIST")
         model = LogisticRegression(28 * 28, output_dim)
@@ -355,9 +355,9 @@ if __name__ == "__main__":
     base_metrics = fedavgAPI.predict_on_test()
 
     # 沙普利值法：计算纵向联邦学习中每个客户端所提供特征的贡献量
-    # fedavgAPI.show_mean_shap_on_all()
+    fedavgAPI.show_shap_on_all()
+    # fedavgAPI.show_federate_shap_on_each_client()
     # fedavgAPI.test_federated_shap()
-    fedavgAPI.test()
 
     # 删除法：计算横向联邦学习中每个客户端的贡献量
     # 通过删除客户端再训练模型，并对测试数据进行预测

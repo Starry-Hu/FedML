@@ -3,11 +3,13 @@ import logging
 import random
 
 import numpy as np
+import pandas as pd
 import shap
 import torch
 import wandb
 
 from fedml_api.contribution.horizontal.client import Client
+from ..vertical.federate_shap import FederateShap
 
 
 class FedAvgAPI(object):
@@ -74,7 +76,8 @@ class FedAvgAPI(object):
                 # train on new dataset
                 w = client.train(w_global)
                 # self.logger.info("local weights = " + str(w))
-                logging.info("client_idx: {}, iteration: {}-th, local weights have been trained. ".format(client_idx, round_idx))
+                logging.info(
+                    "client_idx: {}, iteration: {}-th, local weights have been trained. ".format(client_idx, round_idx))
                 w_locals.append((client.get_sample_number(), copy.deepcopy(w)))
 
             # update global weights
@@ -239,7 +242,7 @@ class FedAvgAPI(object):
             wandb.log({"Test/Rec": test_rec, "round": round_idx})
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
         else:
-            raise Exception("Unknown format to log metrics for dataset {}!"%self.args.dataset)
+            raise Exception("Unknown format to log metrics for dataset {}!" % self.args.dataset)
 
         logging.info(stats)
 
@@ -325,8 +328,8 @@ class FedAvgAPI(object):
 
         return test_metrics
 
-    # 在所有数据上进行特征的shap平均值显示
-    def show_mean_shap_on_all(self):
+    # 在所有数据上进行计算特征的shapley值，并计算联邦特征的shapley值
+    def show_shap_on_all(self):
         logging.info("################load data for shap")
 
         train_X_all, test_X_all = torch.tensor([], device=self.device), torch.tensor([], device=self.device)
@@ -339,44 +342,75 @@ class FedAvgAPI(object):
                                         self.test_data_local_dict[client_idx],
                                         self.train_data_local_num_dict[client_idx])
             train_X, train_y, test_X = client.get_all_X()
-            # train_X, test_X = client.show()  # 都是tensor(1,784)
             train_X_all = torch.cat((train_X_all, train_X), 0)
             test_X_all = torch.cat((test_X_all, test_X), 0)
 
-            e = shap.DeepExplainer(self.model_trainer.model, train_X)
-            shap_values = e.shap_values(test_X)
-            # show sort
-            import pandas as pd
-            df = pd.DataFrame({
-                "mean_abs_shap": np.mean(np.abs(shap_values[1]), axis=0),
-                "stdev_abs_shap": np.std(np.abs(shap_values[1]), axis=0),
-                "name": np.array(self.feature_name[:-1])
-            })
-            df = df.sort_values("mean_abs_shap", ascending=False)
-
-            # 条状图，各特征shapely的均值；蜂巢图，shapely值分别
-            shap.summary_plot(shap_values[1], test_X, feature_names=self.feature_name[:-1], plot_type="bar",
-                              max_display=15, sort=False)
-            # 对单个例子的shap值进行说明
-            shap.plots.bar(shap_values)
-
-            shap.bar_plot(shap_values[0][0], feature_names=self.feature_name[:-1])
-            # shap.bar_plot(shap_values[1][0], feature_names=self.feature_name[:-1])
-
-            clustering = shap.utils.hclust(train_X, train_y)  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
-            shap.plots.bar(shap_values, clustering=clustering, cluster_threshold=0.9)
-
-        # shap.summary_plot(shap_values[1], test_X_all, feature_names=self.feature_name[:-1], plot_type="dot")
-        # shap.force_plot(e.expected_value[0], shap_values[0][0], test_X_all[0],
-        #                 feature_names=self.feature_name[:-1], matplotlib=True)
+        # explain model [total]
+        feature_num = len(self.feature_name) - 1  # 特征个数
+        e = shap.DeepExplainer(self.model_trainer.model, train_X_all)  # train_X_all
+        shap_values = e.shap_values(train_X_all)  # test_X_all
+        # 条状图，各特征shapely的均值；蜂巢图，shapely值分别
+        shap.summary_plot(shap_values[1], train_X_all, feature_names=self.feature_name[:-1],
+                          max_display=feature_num, sort=False, plot_size=(12, 8))
+        shap.summary_plot(shap_values[1], train_X_all, feature_names=self.feature_name[:-1], plot_type="bar",
+                          max_display=feature_num, sort=False, plot_size=(12, 8))
+        # 对单个例子的shap值进行显示
+        shap.bar_plot(shap_values[0][99], feature_names=self.feature_name[:-1], max_display=feature_num)
+        shap.bar_plot(shap_values[1][99], feature_names=self.feature_name[:-1], max_display=feature_num)
+        # 力图：显示某样本为1类时各特征的驱动情况
+        shap.force_plot(e.expected_value[1], np.around(shap_values[1][99], decimals=4), train_X_all[99].numpy(),
+                        feature_names=self.feature_name[:-1], matplotlib=True, figsize=(25, 6))
 
         # mnist绘图
         # shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
         # test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
         # shap.image_plot(shap_numpy, -test_numpy)
 
-    def test(self):
+        # compute federate shapley
+        train_X_all_pd = pd.DataFrame(train_X_all.numpy())
+        data = shap.kmeans(train_X_all_pd, 20)
+        weights = data.weights
+        step = 3
+
+        # 遍历联邦特征，获取到当前联邦特征的起始下标
+        for fed_pos in range(0, feature_num, step):
+            cols_federated = self.feature_name[:-1]
+            cols_federated[fed_pos] = 'Federated'
+            del cols_federated[fed_pos + 1: fed_pos + 3]
+            # 修改shap_values的各项值（list）
+            shap_values_fed = copy.deepcopy(shap_values)
+            for i, val in enumerate(shap_values_fed):
+                # 遍历当前联邦特征，计算联邦特征的shapley值
+                sumFed = np.zeros(val.shape[0], dtype=float)
+                sumWeights = 0
+                for fed_pos_index in range(fed_pos, fed_pos+step):
+                    sumFed += val[:, fed_pos_index] * weights[fed_pos_index]
+                    sumWeights += weights[fed_pos_index]
+                # 计算联邦特征的shapley值
+                val[:, 0] = sumFed / sumWeights
+                val = np.delete(val, [1, 2], 1)
+                compareWeight = sumWeights / 3
+                # 遍历其他各列，根据权重进行加减，对shapley值进行修正
+                for l in range(feature_num - step + 1):
+                    if l == fed_pos:
+                        continue
+                    else:
+                        if weights[l] > compareWeight:
+                            val[:, l] += sumFed / sumWeights * 10 * weights[l]
+                        else:
+                            val[:, l] -= sumFed / sumWeights * weights[l]
+                shap_values_fed[i] = val
+            # 对联邦特征的shapley值进行绘图
+            shap.summary_plot(shap_values_fed[1], feature_names=cols_federated, sort=False, plot_size=(12, 8),
+                              color='y')
+            shap.summary_plot(shap_values_fed[1], feature_names=cols_federated, sort=False, plot_type="bar",
+                              plot_size=(12, 8), color='y')
+
+    def show_federate_shap_on_each_client(self):
+        logging.info("################load data for shap")
+
         client = self.client_list[0]
+        fed_pos = 0  # 联邦特征的起始下标
         for client_idx in range(self.args.client_num_in_total):
             if self.test_data_local_dict[client_idx] is None:
                 continue
@@ -385,101 +419,37 @@ class FedAvgAPI(object):
                                         self.train_data_local_num_dict[client_idx])
             train_X, train_y, test_X = client.get_all_X()
 
-            e = shap.DeepExplainer(self.model_trainer.model, train_X)
-            # shap_values = e.shap_values(test_X)
-
-            # Explain the model
-            # f_knn = lambda x: knn_norm.predict_proba(x)[:, 1]
-            import pandas as pd
-            X_train_norm = pd.DataFrame(train_X.numpy())
+            # federate shapley
+            train_X_all_pd = pd.DataFrame(train_X.numpy())
             f_knn = lambda x: self.model_trainer.model.forward(x)
-            med = X_train_norm.median().values.reshape((1, X_train_norm.shape[1]))
-            x = np.array(X_train_norm.iloc[0])
-            # x = np.array(X_train_norm.loc[2583])
-            M = 15  # adult 12
-            from ..vertical.federate_shap import FederateShap
+            med = train_X_all_pd.median().values.reshape((1, train_X_all_pd.shape[1]))
+            feature_num = len(self.feature_name) - 1  # 特征个数
             fs = FederateShap()
 
-            # shap
-            phi = fs.kernel_shap(f_knn, x, med, M)
-            base_value = phi[-1]
-            shap_values = phi[:-1]
-            t1 = np.array([shap_values]).squeeze().transpose()
-            shap_values_df = pd.DataFrame(data=t1, columns=self.feature_name[:-1])
-            print("Shap Values")
-            # shap_values_df
-            import matplotlib.pyplot as plt
-            row = shap_values_df.iloc[0]
-            row.plot(kind='bar', color='k')
-            plt.show()
-
-            # federated shap
-            fed_pos = 9
-            print(x)
-            phi = fs.kernel_shap_federated(f_knn, x, med, M, fed_pos)
-            base_value = phi[-1]
-            shap_values = phi[:-1]
-            new_columns = list(X_train_norm)[:fed_pos]
-            new_columns.extend(['Federated'])
-            shap_values_df = pd.DataFrame(data=np.array([shap_values]), columns=new_columns)
-            print("Federated Shap Values")
-            # shap_values_df.plot()
-            row = shap_values_df.iloc[0]
-            row.plot(kind='bar', color='b')
-            plt.show()
-
-            # Aggregated and average shap
-            shap_values_whole = []
-            counttt = 0
-            for index, row in X_train_norm.iterrows():
-                counttt += 1
-                if counttt > 20:  # 1000
-                    break
-                x = row
-                phi = fs.kernel_shap(f_knn, x, med, M)
-                base_value = phi[-1]
-                shap_values = phi[:-1]
-                shap_values_whole.append(list(shap_values))
-            shap_values_whole = np.array(shap_values_whole)
-            print(shap_values_whole)
-
             # Aggregated and average federated shap
+            data = shap.kmeans(train_X_all_pd, 20)
+            step = 3
             shap_values_whole = []
-            cols_federated_9 = ['Age', 'Country', 'Education-Num', 'Marital Status', 'Relationship', 'Race', 'Sex',
-                                'Capital Gain', 'Capital Loss', 'Federated']
-            cols_federated_7 = ['Age', 'Country', 'Education-Num', 'Marital Status', 'Relationship', 'Race', 'Sex',
-                                'Federated']
-            counttt = 0
-            M = 12
-            fed_pos = 7
-            for index, row in X_train_norm.iterrows():
-                counttt += 1
-                if counttt > 20:  # 1000
-                    break
-                x = np.array(row)
-                # print(x)
-                # print(M)
-                # print(fed_pos)
-                phi = fs.kernel_shap_federated(f_knn, x, med, M, fed_pos)
+            cols_federated = self.feature_name[:-1]
+            cols_federated[fed_pos] = 'Federated'
+            del cols_federated[fed_pos + 1: fed_pos + step]
+
+            for x in data.data:
+                phi = fs.kernel_shap_federated_with_step(f_knn, x, med, feature_num, fed_pos, step)
                 base_value = phi[-1]
                 shap_values = phi[:-1]
                 shap_values_whole.append(list(shap_values))
             shap_values_whole = np.array(shap_values_whole)
-            # print(shap_values_whole)
-
-            shap.summary_plot(shap_values_whole, feature_names=cols_federated_7, sort=False, color='r')
-            shap.summary_plot(shap_values_whole, feature_names=cols_federated_7, sort=False, plot_type="bar", color='r')
-
-            ########### test end
-
+            shap_values_whole_mean = np.mean(shap_values_whole, axis=0).transpose()
+            # 绘制联邦特征shapley值的图
+            shap.summary_plot(shap_values_whole_mean, feature_names=cols_federated, sort=False)
+            shap.summary_plot(shap_values_whole_mean, feature_names=cols_federated, sort=False, plot_type="bar")
+            fed_pos += step
 
     def test_federated_shap(self):
         ####### test shap federated
         import shap
         shap.initjs()
-
-        import ssl
-        ssl._create_default_https_context = ssl._create_unverified_context
 
         # load data
         X, y = shap.datasets.adult()
